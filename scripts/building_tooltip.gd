@@ -83,6 +83,8 @@ func show_building_info(building_id: String, grid_pos: Vector2i):
 	# Extraction info
 	var extraction_rate = building_data.get("extraction_rate", 0.0)
 	if extraction_rate > 0:
+		var multiplier = GameState.extraction_rate_modifiers.get(building_id, 1.0)
+		var effective_rate = extraction_rate * multiplier
 		# This is an extractor - show what it's extracting
 		var tile_grid = get_tree().root.get_node("PlanetSurface/TileGrid")
 		if tile_grid:
@@ -91,7 +93,7 @@ func show_building_info(building_id: String, grid_pos: Vector2i):
 			if resource != null and resource != "":
 				var res_data = GameData.get_resource_by_id(resource)
 				if not res_data.is_empty():
-					produces_label.text = "Extracts:\n  + %s: %.1f/min" % [res_data.name, extraction_rate]
+					produces_label.text = "Extracts:\n  + %s: %.1f/min" % [res_data.name, effective_rate]
 					produces_label.add_theme_color_override("font_color", Color.GREEN)
 					produces_label.show()
 				else:

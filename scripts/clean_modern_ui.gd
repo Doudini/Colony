@@ -354,7 +354,7 @@ func _toggle_window(window_name: String):
 
 func _create_resources_window():
 	"""Create detailed resources window"""
-	var window_data = _create_draggable_window("Resources", Vector2(350, 500), Vector2(100, 100))
+	var window_data = _create_draggable_window("Resources", Vector2(350, 500), Vector2(100, 100), "resources")
 	windows["resources"] = window_data["window"]
 	
 	var scroll = ScrollContainer.new()
@@ -433,7 +433,7 @@ func _create_resources_window():
 
 func _create_tech_window():
 	"""Create tech tree window"""
-	var window_data = _create_draggable_window("Technology", Vector2(900, 520), Vector2(200, 120))
+	var window_data = _create_draggable_window("Technology", Vector2(900, 520), Vector2(200, 120), "tech")
 	windows["tech"] = window_data["window"]
 	
 	var scroll = ScrollContainer.new()
@@ -561,10 +561,10 @@ func _refresh_research_ui():
 	for item in GameData.research:
 		if item.id not in research_ui_nodes:
 			continue
-		var nodes = research_ui_nodes[item.id]
-		var status_label: Label = nodes.status
-		var progress_label: Label = nodes.progress
-		var button: Button = nodes.button
+		var nodes: Dictionary = research_ui_nodes[item.id]
+		var status_label: Label = nodes.get("status", null)
+		var progress_label: Label = nodes.get("progress", null)
+		var button: Button = nodes.get("button", null)
 		if not (is_instance_valid(status_label) and is_instance_valid(progress_label) and is_instance_valid(button)):
 			continue
 		
@@ -632,7 +632,7 @@ func _update_tech_button_state():
 	if tech_btn:
 		tech_btn.disabled = GameState.get_research_tier_unlocked() <= 0
 
-func _create_draggable_window(title: String, size: Vector2, pos: Vector2) -> Dictionary:
+func _create_draggable_window(title: String, size: Vector2, pos: Vector2, window_key: String = "") -> Dictionary:
 	"""Create draggable window - returns dict with window and content"""
 	var window = PanelContainer.new()
 	window.custom_minimum_size = size
@@ -661,7 +661,12 @@ func _create_draggable_window(title: String, size: Vector2, pos: Vector2) -> Dic
 	close_btn.text = "×"
 	close_btn.custom_minimum_size = Vector2(30, 30)
 	close_btn.pressed.connect(func():
-		windows.erase(title.to_lower().replace(" ", "_"))
+		var key = window_key
+		if key == "":
+			key = title.to_lower().replace(" ", "_")
+		if key == "tech":
+			research_ui_nodes.clear()
+		windows.erase(key)
 		window.queue_free()
 	)
 	title_hbox.add_child(close_btn)
