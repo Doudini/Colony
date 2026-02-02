@@ -166,7 +166,7 @@ func _create_top_bar():
 	margin.add_child(hbox)
 	
 	# Essential resources only
-	var essential = ["minerals", "hydrogen", "biomatter", "energy"]
+	var essential = ["food", "water", "wood", "minerals", "hydrogen", "biomatter", "energy"]
 	for res_id in essential:
 		var res_data = GameData.get_resource_by_id(res_id)
 		if res_data.is_empty():
@@ -250,7 +250,8 @@ func _create_bottom_panel():
 		{"id": "extraction", "name": "⛏️ Extract"},
 		{"id": "production", "name": "🏭 Produce"},
 		{"id": "storage", "name": "📦 Store"},
-		{"id": "infrastructure", "name": "🏗️ Build"}
+		{"id": "infrastructure", "name": "🏗️ Build"},
+		{"id": "research", "name": "🔬 Research"}
 	]
 	
 	for cat in categories:
