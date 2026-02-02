@@ -249,6 +249,7 @@ func _create_bottom_panel():
 	
 	var categories = [
 		{"id": "extraction", "name": "⛏️ Extract"},
+		{"id": "life_support", "name": "🌿 Life"},
 		{"id": "production", "name": "🏭 Produce"},
 		{"id": "storage", "name": "📦 Store"},
 		{"id": "infrastructure", "name": "🏗️ Build"},
@@ -439,6 +440,28 @@ func _create_tech_window():
 	var window_data = _create_draggable_window("Technology", Vector2(900, 520), Vector2(200, 120), "tech")
 	windows["tech"] = window_data["window"]
 	
+	var summary_panel = PanelContainer.new()
+	summary_panel.custom_minimum_size.y = 40
+	window_data["content"].add_child(summary_panel)
+	
+	var summary_margin = MarginContainer.new()
+	summary_margin.add_theme_constant_override("margin_left", 6)
+	summary_margin.add_theme_constant_override("margin_right", 6)
+	summary_margin.add_theme_constant_override("margin_top", 6)
+	summary_margin.add_theme_constant_override("margin_bottom", 6)
+	summary_panel.add_child(summary_margin)
+	
+	var summary_row = HBoxContainer.new()
+	summary_row.add_theme_constant_override("separation", 12)
+	summary_margin.add_child(summary_row)
+	
+	for branch in GameData.research_branches:
+		var tier = GameState.get_research_tier_unlocked(branch.id)
+		var label = Label.new()
+		label.text = "%s Tier %d" % [branch.name, tier]
+		label.add_theme_font_size_override("font_size", 11)
+		summary_row.add_child(label)
+	
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -510,9 +533,19 @@ func _create_tech_window():
 			status_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 			vbox.add_child(status_label)
 			
+			var progress_bar = ProgressBar.new()
+			progress_bar.name = "ResearchProgress_" + item.id
+			progress_bar.min_value = 0
+			progress_bar.max_value = 100
+			progress_bar.value = 0
+			progress_bar.show_percentage = false
+			progress_bar.visible = false
+			vbox.add_child(progress_bar)
+			
 			research_ui_nodes[item.id] = {
 				"button": action_btn,
-				"status": status_label
+				"status": status_label,
+				"progress": progress_bar
 			}
 	
 	_refresh_research_ui()
@@ -541,7 +574,8 @@ func _refresh_research_ui():
 		var nodes: Dictionary = research_ui_nodes[item.id]
 		var button: Button = nodes.get("button", null)
 		var status_label: Label = nodes.get("status", null)
-		if not (is_instance_valid(button) and is_instance_valid(status_label)):
+		var progress_bar: ProgressBar = nodes.get("progress", null)
+		if not (is_instance_valid(button) and is_instance_valid(status_label) and is_instance_valid(progress_bar)):
 			continue
 		
 		var status = _get_research_status(item)
@@ -551,12 +585,16 @@ func _refresh_research_ui():
 		status_label.text = status.text
 		if status.progress != "":
 			status_label.text = "%s • %s" % [status.text, status.progress]
+		
+		progress_bar.visible = status.progress_ratio > 0.0
+		progress_bar.value = status.progress_ratio * 100.0
 
 func _get_research_status(item: Dictionary) -> Dictionary:
 	var research_id = item.id
-	var tier_unlocked = GameState.get_research_tier_unlocked()
+	var tier_unlocked = GameState.get_research_tier_unlocked(item.get("branch", ""))
 	var status_text = ""
 	var progress_text = ""
+	var progress_ratio = 0.0
 	var level = GameState.get_research_level(research_id)
 	var max_level = int(item.get("max_level", 1))
 	var button_text = "%s (%d/%d)" % [item.name, level, max_level]
@@ -573,6 +611,8 @@ func _get_research_status(item: Dictionary) -> Dictionary:
 	elif GameState.active_research_id == research_id:
 		status_text = "🔬 Researching"
 		progress_text = "Time left: %.0fs" % GameState.active_research_time_left
+		if GameState.active_research_time_total > 0.0:
+			progress_ratio = (GameState.active_research_time_total - GameState.active_research_time_left) / GameState.active_research_time_total
 		button_text = "%s (Active)" % item.name
 		disabled = true
 	elif research_id in GameState.research_queue:
@@ -610,7 +650,8 @@ func _get_research_status(item: Dictionary) -> Dictionary:
 		"text": status_text,
 		"progress": progress_text,
 		"button_text": button_text,
-		"disabled": disabled
+		"disabled": disabled,
+		"progress_ratio": clamp(progress_ratio, 0.0, 1.0)
 	}
 
 func _build_research_tooltip(item: Dictionary, status: Dictionary) -> String:
@@ -621,9 +662,13 @@ func _build_research_tooltip(item: Dictionary, status: Dictionary) -> String:
 	var cost = GameState.get_research_cost(item, next_level)
 	var time = GameState.get_research_time(item, next_level)
 	var cost_text = _format_research_cost(cost)
+	var branch = GameData.get_research_branch_by_id(item.get("branch", ""))
+	var branch_name = branch.get("name", item.get("branch", ""))
+	var tier_unlocked = GameState.get_research_tier_unlocked(item.get("branch", ""))
 	var lines = []
 	lines.append(item.name)
 	lines.append("Level: %d/%d" % [level, max_level])
+	lines.append("Branch: %s • Tier %d" % [branch_name, tier_unlocked])
 	lines.append(item.description)
 	lines.append(status.text)
 	if level < max_level:
@@ -636,7 +681,7 @@ func _build_research_tooltip(item: Dictionary, status: Dictionary) -> String:
 func _update_tech_button_state():
 	var tech_btn = find_child("TechButton", true, false)
 	if tech_btn:
-		tech_btn.disabled = GameState.get_research_tier_unlocked() <= 0
+		tech_btn.disabled = GameState.get_total_research_building_count() <= 0
 
 func _create_draggable_window(title: String, size: Vector2, pos: Vector2, window_key: String = "") -> Dictionary:
 	"""Create draggable window - returns dict with window and content"""

@@ -37,6 +37,7 @@ var research_levels: Dictionary = {}  # {research_id: level}
 var research_queue: Array[String] = []
 var active_research_id: String = ""
 var active_research_time_left: float = 0.0
+var active_research_time_total: float = 0.0
 
 var extraction_rate_modifiers: Dictionary = {}  # {building_id: multiplier}
 var upkeep_modifiers: Dictionary = {}  # {building_id: {resource_id: multiplier}}
@@ -113,21 +114,33 @@ func get_research_cost(item: Dictionary, level: int) -> Dictionary:
 		cost[res_id] = int(ceil(float(base_cost[res_id]) * multiplier))
 	return cost
 
-func get_research_tier_unlocked() -> int:
+func get_research_tier_unlocked(branch_id: String = "") -> int:
 	"""Tier unlocked based on research buildings placed"""
-	return _get_research_building_count()
+	return _get_research_building_count(branch_id)
 
-func _get_research_building_count() -> int:
+func get_total_research_building_count() -> int:
+	"""Total research buildings placed in the world"""
+	return _get_research_building_count("")
+
+func _get_research_building_count(branch_id: String) -> int:
 	"""Count research buildings placed in the world"""
 	var count = 0
 	var building_manager = get_tree().root.get_node_or_null("PlanetSurface/BuildingManager")
 	var tile_grid = get_tree().root.get_node_or_null("PlanetSurface/TileGrid")
 	if building_manager and tile_grid and "placed_buildings" in building_manager:
+		var branch_building_ids: Array = []
+		if branch_id != "":
+			var branch = GameData.get_research_branch_by_id(branch_id)
+			branch_building_ids = branch.get("building_ids", [])
 		for grid_pos in building_manager.placed_buildings:
 			var tile_info = tile_grid.get_tile_info(grid_pos)
 			var building_id = tile_info.get("building", "")
-			if building_id in ["building_research", "ship_research", "tech_research"]:
-				count += 1
+			if branch_id == "":
+				if building_id in ["building_research", "ship_research", "tech_research"]:
+					count += 1
+			else:
+				if building_id in branch_building_ids:
+					count += 1
 	return count
 
 func can_start_research(research_id: String) -> bool:
@@ -139,7 +152,7 @@ func can_start_research(research_id: String) -> bool:
 	var max_level = int(item.get("max_level", 1))
 	if level >= max_level:
 		return false
-	var tier_unlocked = get_research_tier_unlocked()
+	var tier_unlocked = get_research_tier_unlocked(item.get("branch", ""))
 	if tier_unlocked == 0:
 		return false
 	if item.get("tier", 0) > tier_unlocked:
@@ -186,7 +199,8 @@ func _try_start_next_research():
 			return
 		deduct_resources(cost)
 	active_research_id = next_id
-	active_research_time_left = get_research_time(item, level)
+	active_research_time_total = get_research_time(item, level)
+	active_research_time_left = active_research_time_total
 	research_progress_changed.emit(active_research_id, active_research_time_left)
 
 func tick_research(delta: float):
@@ -215,6 +229,7 @@ func _complete_active_research():
 		completed_research[completed_id] = true
 	active_research_id = ""
 	active_research_time_left = 0.0
+	active_research_time_total = 0.0
 	_apply_research_effects(item.get("effects", []))
 	var resource_tracker = get_tree().root.get_node_or_null("PlanetSurface/ResourceTracker")
 	if resource_tracker:
@@ -401,7 +416,8 @@ func get_save_data() -> Dictionary:
 		"research_levels": research_levels,
 		"research_queue": research_queue,
 		"active_research_id": active_research_id,
-		"active_research_time_left": active_research_time_left
+		"active_research_time_left": active_research_time_left,
+		"active_research_time_total": active_research_time_total
 	}
 
 func load_save_data(data: Dictionary):
@@ -415,3 +431,4 @@ func load_save_data(data: Dictionary):
 	research_queue = data.get("research_queue", research_queue)
 	active_research_id = data.get("active_research_id", "")
 	active_research_time_left = data.get("active_research_time_left", 0.0)
+	active_research_time_total = data.get("active_research_time_total", 0.0)

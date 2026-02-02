@@ -9,10 +9,12 @@ var buildings: Array[Dictionary] = []
 
 # Research tech definitions
 var research: Array[Dictionary] = []
+var research_branches: Array[Dictionary] = []
 
 func _ready():
 	_initialize_resources()
 	_initialize_buildings()
+	_initialize_research_branches()
 	_initialize_research()
 
 func _initialize_resources():
@@ -296,7 +298,7 @@ func _initialize_buildings():
 				"time": 10.0
 			},
 			"color": Color(0.2, 0.3, 0.5),
-			"category": "energy",
+			"category": "production",
 			"tier": 0
 		},
 		{
@@ -314,7 +316,7 @@ func _initialize_buildings():
 			},
 			"population_capacity": 5,
 			"color": Color(0.6, 0.6, 0.6),
-			"category": "habitation",
+			"category": "life_support",
 			"tier": 0
 		},
 		{
@@ -834,6 +836,31 @@ func _initialize_research():
 			]
 		},
 		{
+			"id": "forestry_yield_focus",
+			"name": "Forestry Yield Focus",
+			"description": "Focused harvest routes for higher yield.",
+			"tier": 1,
+			"branch": "building",
+			"time": 45.0,
+			"time_scale": 0.2,
+			"cost": {
+				"wood": 30,
+				"energy": 20
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "forestry_efficiency", "level": 2}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "forester",
+					"multiplier": 1.05
+				}
+			]
+		},
+		{
 			"id": "biomatter_reclaimers",
 			"name": "Biomatter Reclaimers",
 			"description": "Recover biomatter loss across extractor crews.",
@@ -854,6 +881,32 @@ func _initialize_research():
 					"building_id": "miner",
 					"resource_id": "biomatter",
 					"multiplier": 0.95
+				}
+			]
+		},
+		{
+			"id": "sustainability_routines",
+			"name": "Sustainability Routines",
+			"description": "Operational routines reduce biomatter waste.",
+			"tier": 1,
+			"branch": "building",
+			"time": 50.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 25,
+				"biomatter": 20
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "biomatter_reclaimers", "level": 1}
+			],
+			"effects": [
+				{
+					"type": "upkeep_multiplier",
+					"building_id": "miner",
+					"resource_id": "biomatter",
+					"multiplier": 0.97
 				}
 			]
 		},
@@ -883,6 +936,29 @@ func _initialize_research():
 			]
 		},
 		{
+			"id": "advanced_surveying",
+			"name": "Advanced Surveying",
+			"description": "Precision survey arrays boost mining throughput.",
+			"tier": 2,
+			"branch": "building",
+			"time": 55.0,
+			"time_scale": 0.2,
+			"cost": {
+				"metal": 25,
+				"energy": 20
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.04
+				}
+			]
+		},
+		{
 			"id": "extractor_networks",
 			"name": "Extractor Networks",
 			"description": "Coordinated logistics reduce downtime.",
@@ -906,6 +982,51 @@ func _initialize_research():
 					"multiplier": 1.04
 				}
 			]
+		},
+		{
+			"id": "forestry_automation",
+			"name": "Forestry Automation",
+			"description": "Automated trimming yields consistent output.",
+			"tier": 2,
+			"branch": "building",
+			"time": 60.0,
+			"time_scale": 0.25,
+			"cost": {
+				"metal": 30,
+				"energy": 25
+			},
+			"cost_scale": 0.3,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "forestry_yield_focus", "level": 2}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "forester",
+					"multiplier": 1.05
+				}
+			]
+		}
+	]
+
+func _initialize_research_branches():
+	"""Define research branches and their unlocking buildings"""
+	research_branches = [
+		{
+			"id": "building",
+			"name": "Building",
+			"building_ids": ["building_research"]
+		},
+		{
+			"id": "tech",
+			"name": "Technology",
+			"building_ids": ["tech_research"]
+		},
+		{
+			"id": "ship",
+			"name": "Ship",
+			"building_ids": ["ship_research"]
 		}
 	]
 
@@ -961,6 +1082,12 @@ func get_research_by_id(research_id: String) -> Dictionary:
 	for item in research:
 		if item.id == research_id:
 			return item
+	return {}
+
+func get_research_branch_by_id(branch_id: String) -> Dictionary:
+	for branch in research_branches:
+		if branch.id == branch_id:
+			return branch
 	return {}
 
 func can_afford_building(building_id: String, inventory: Dictionary) -> bool:

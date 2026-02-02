@@ -14,6 +14,7 @@ var selected_building_id: String = ""
 
 # Track extraction timers so we can stop them
 var extraction_timers: Dictionary = {}  # {grid_pos: Timer}
+var extraction_accumulators: Dictionary = {}  # {grid_pos: float}
 
 # Store original building colors and emission for resume
 var building_materials: Dictionary = {}  # {grid_pos: {albedo: Color, emission: Color, emission_enabled: bool}}
@@ -431,6 +432,7 @@ func _start_extraction(grid_pos: Vector2i, building_id: String):
 	add_child(timer)
 	
 	extraction_timers[grid_pos] = timer
+	extraction_accumulators[grid_pos] = 0.0
 
 func _on_extraction_tick(grid_pos: Vector2i, building_id: String, resource_id: String, rate: float):
 	"""Handle one extraction tick"""
@@ -443,7 +445,11 @@ func _on_extraction_tick(grid_pos: Vector2i, building_id: String, resource_id: S
 	# For now, just extract at full rate - upkeep manager will handle shortages
 	
 	var multiplier = GameState.extraction_rate_modifiers.get(building_id, 1.0)
-	var amount = ceil(rate * multiplier)
+	var buffer = extraction_accumulators.get(grid_pos, 0.0)
+	buffer += rate * multiplier
+	var amount = int(floor(buffer))
+	buffer -= amount
+	extraction_accumulators[grid_pos] = buffer
 	
 	if amount > 0:
 		GameState.add_resource(resource_id, amount)
@@ -518,6 +524,8 @@ func demolish_building(grid_pos: Vector2i) -> bool:
 		timer.stop()
 		timer.queue_free()
 		extraction_timers.erase(grid_pos)
+	if grid_pos in extraction_accumulators:
+		extraction_accumulators.erase(grid_pos)
 	
 	# Remove visual
 	var building = placed_buildings[grid_pos]
