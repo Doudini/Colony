@@ -7,9 +7,13 @@ var resources: Array[Dictionary] = []
 # Building types
 var buildings: Array[Dictionary] = []
 
+# Research tech definitions
+var research: Array[Dictionary] = []
+
 func _ready():
 	_initialize_resources()
 	_initialize_buildings()
+	_initialize_research()
 
 func _initialize_resources():
 	"""Define tiered resource system"""
@@ -651,6 +655,24 @@ func _initialize_buildings():
 			"tier": 2
 		},
 		{
+			"id": "tech_research",
+			"name": "Technology Research Lab",
+			"description": "General-purpose research hub for applied sciences.",
+			"size": Vector2i(3, 3),
+			"build_cost": {
+				"minerals": 60,
+				"metal": 25,
+				"components": 12
+			},
+			"upkeep": {
+				"energy": 1
+			},
+			"production": {},
+			"color": Color(0.1, 0.3, 0.35, 1.0),
+			"category": "research",
+			"tier": 2
+		},
+		{
 			"id": "ship_research",
 			"name": "Ship Research Lab",
 			"description": "Unlocks ship upgrades and faster trade routes.",
@@ -687,6 +709,52 @@ func _initialize_buildings():
 			"category": "infrastructure",
 			"special": "enables_space_travel",
 			"tier": 4
+		}
+	]
+
+func _initialize_research():
+	"""Define research tech tree entries"""
+	research = [
+		{
+			"id": "miner_extraction_boost",
+			"name": "Improved Drill Heads",
+			"description": "Upgrade miner tooling for faster extraction.",
+			"tier": 0,
+			"branch": "building",
+			"time": 30.0,
+			"cost": {
+				"minerals": 25,
+				"energy": 10
+			},
+			"prerequisites": [],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.2
+				}
+			]
+		},
+		{
+			"id": "miner_biomatter_efficiency",
+			"name": "Biomatter Recyclers",
+			"description": "Reduce miner biomatter usage with recycling systems.",
+			"tier": 0,
+			"branch": "building",
+			"time": 40.0,
+			"cost": {
+				"minerals": 20,
+				"biomatter": 10
+			},
+			"prerequisites": ["miner_extraction_boost"],
+			"effects": [
+				{
+					"type": "upkeep_multiplier",
+					"building_id": "miner",
+					"resource_id": "biomatter",
+					"multiplier": 0.8
+				}
+			]
 		}
 	]
 
@@ -736,6 +804,12 @@ func get_building_by_id(building_id: String) -> Dictionary:
 	for building in buildings:
 		if building.id == building_id:
 			return building
+	return {}
+
+func get_research_by_id(research_id: String) -> Dictionary:
+	for item in research:
+		if item.id == research_id:
+			return item
 	return {}
 
 func can_afford_building(building_id: String, inventory: Dictionary) -> bool:

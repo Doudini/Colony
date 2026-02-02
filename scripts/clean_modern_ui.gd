@@ -13,12 +13,16 @@ var context_menu: BuildingContextMenu
 var placement_tooltip: PlacementTooltip
 var miner_warning: MisplacedMinerWarning
 var building_control: BuildingControl
+var research_ui_nodes: Dictionary = {}  # {research_id: {button, status, progress}}
 
 func _ready():
 	_build_ui()
 	_create_ui_components()
 	GameState.resources_changed.connect(_update_resource_display)
 	GameState.production_rate_changed.connect(_update_resource_display)
+	GameState.research_queue_changed.connect(_refresh_research_ui)
+	GameState.research_progress_changed.connect(_on_research_progress_changed)
+	_update_tech_button_state()
 
 func _create_ui_components():
 	"""Create all UI overlay components"""
@@ -186,7 +190,7 @@ func _create_top_bar():
 	tech_btn.text = "🔬 Tech Tree"
 	tech_btn.custom_minimum_size = Vector2(120, 30)
 	tech_btn.pressed.connect(_toggle_window.bind("tech"))
-	tech_btn.disabled = true  # Enable when R&D built
+	tech_btn.disabled = true  # Updated later based on research buildings
 	tech_btn.name = "TechButton"
 	hbox.add_child(tech_btn)
 
@@ -337,6 +341,8 @@ func _on_building_clicked(building_id: String):
 func _toggle_window(window_name: String):
 	"""Toggle draggable window"""
 	if window_name in windows and is_instance_valid(windows[window_name]):
+		if window_name == "tech":
+			research_ui_nodes.clear()
 		windows[window_name].queue_free()
 		windows.erase(window_name)
 	else:
@@ -426,17 +432,205 @@ func _create_resources_window():
 		stats.add_child(rate_label)
 
 func _create_tech_window():
-	"""Create tech tree window (placeholder)"""
-	var window_data = _create_draggable_window("Technology", Vector2(600, 400), Vector2(200, 150))
+	"""Create tech tree window"""
+	var window_data = _create_draggable_window("Technology", Vector2(900, 520), Vector2(200, 120))
 	windows["tech"] = window_data["window"]
 	
-	var label = Label.new()
-	label.text = "🔬 TECHNOLOGY TREE\n\n(Placeholder)\n\nBuild R&D building to unlock research"
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	window_data["content"].add_child(label)
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	window_data["content"].add_child(scroll)
+	
+	scroll.gui_input.connect(func(event):
+		if event is InputEventMouseButton:
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				scroll.accept_event()
+	)
+	
+	var columns = HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 20)
+	scroll.add_child(columns)
+	
+	research_ui_nodes.clear()
+	
+	var tiers: Dictionary = {}
+	for item in GameData.research:
+		var tier = item.get("tier", 0)
+		if tier not in tiers:
+			tiers[tier] = []
+		tiers[tier].append(item)
+	
+	var tier_keys = tiers.keys()
+	tier_keys.sort()
+	
+	for tier in tier_keys:
+		var tier_vbox = VBoxContainer.new()
+		tier_vbox.custom_minimum_size = Vector2(260, 0)
+		columns.add_child(tier_vbox)
+		
+		var tier_label = Label.new()
+		tier_label.text = "Tier %d" % tier
+		tier_label.add_theme_font_size_override("font_size", 14)
+		tier_vbox.add_child(tier_label)
+		
+		var tier_items: Array = tiers[tier]
+		for item in tier_items:
+			var panel = PanelContainer.new()
+			panel.custom_minimum_size.y = 140
+			tier_vbox.add_child(panel)
+			
+			var margin = MarginContainer.new()
+			margin.add_theme_constant_override("margin_left", 10)
+			margin.add_theme_constant_override("margin_top", 10)
+			margin.add_theme_constant_override("margin_right", 10)
+			margin.add_theme_constant_override("margin_bottom", 10)
+			panel.add_child(margin)
+			
+			var vbox = VBoxContainer.new()
+			vbox.add_theme_constant_override("separation", 6)
+			margin.add_child(vbox)
+			
+			var name_label = Label.new()
+			name_label.text = item.name
+			name_label.add_theme_font_size_override("font_size", 13)
+			vbox.add_child(name_label)
+			
+			var desc_label = Label.new()
+			desc_label.text = item.description
+			desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+			desc_label.add_theme_font_size_override("font_size", 10)
+			desc_label.add_theme_color_override("font_color", Color.GRAY)
+			vbox.add_child(desc_label)
+			
+			var cost_text = _format_research_cost(item.get("cost", {}))
+			if cost_text != "":
+				var cost_label = Label.new()
+				cost_label.text = "Cost: %s" % cost_text
+				cost_label.add_theme_font_size_override("font_size", 10)
+				vbox.add_child(cost_label)
+			
+			var time_label = Label.new()
+			time_label.text = "Time: %.0fs" % float(item.get("time", 0.0))
+			time_label.add_theme_font_size_override("font_size", 10)
+			vbox.add_child(time_label)
+			
+			var status_label = Label.new()
+			status_label.name = "Status_" + item.id
+			status_label.add_theme_font_size_override("font_size", 10)
+			vbox.add_child(status_label)
+			
+			var progress_label = Label.new()
+			progress_label.name = "Progress_" + item.id
+			progress_label.add_theme_font_size_override("font_size", 10)
+			progress_label.add_theme_color_override("font_color", Color(0.6, 0.9, 1.0))
+			vbox.add_child(progress_label)
+			
+			var action_btn = Button.new()
+			action_btn.name = "ResearchBtn_" + item.id
+			action_btn.text = "Start Research"
+			action_btn.pressed.connect(_on_research_button_pressed.bind(item.id))
+			vbox.add_child(action_btn)
+			
+			research_ui_nodes[item.id] = {
+				"button": action_btn,
+				"status": status_label,
+				"progress": progress_label
+			}
+	
+	_refresh_research_ui()
+
+func _format_research_cost(cost: Dictionary) -> String:
+	if cost.is_empty():
+		return ""
+	var parts = []
+	for res_id in cost:
+		parts.append("%d %s" % [cost[res_id], res_id])
+	return ", ".join(parts)
+
+func _on_research_button_pressed(research_id: String):
+	if GameState.queue_research(research_id):
+		_refresh_research_ui()
+
+func _on_research_progress_changed(_active_id: String, _time_left: float):
+	_refresh_research_ui()
+
+func _refresh_research_ui():
+	if research_ui_nodes.is_empty():
+		return
+	for item in GameData.research:
+		if item.id not in research_ui_nodes:
+			continue
+		var nodes = research_ui_nodes[item.id]
+		var status_label: Label = nodes.status
+		var progress_label: Label = nodes.progress
+		var button: Button = nodes.button
+		if not (is_instance_valid(status_label) and is_instance_valid(progress_label) and is_instance_valid(button)):
+			continue
+		
+		var status = _get_research_status(item)
+		status_label.text = status.text
+		progress_label.text = status.progress
+		button.disabled = status.disabled
+		button.text = status.button_text
+
+func _get_research_status(item: Dictionary) -> Dictionary:
+	var research_id = item.id
+	var tier_unlocked = GameState.get_research_tier_unlocked()
+	var status_text = ""
+	var progress_text = ""
+	var button_text = "Start Research"
+	var disabled = false
+	
+	if tier_unlocked == 0:
+		status_text = "🔒 Build research labs to unlock"
+		button_text = "Locked"
+		disabled = true
+	elif GameState.completed_research.get(research_id, false):
+		status_text = "✅ Completed"
+		button_text = "Completed"
+		disabled = true
+	elif GameState.active_research_id == research_id:
+		status_text = "🔬 Researching"
+		progress_text = "Time left: %.0fs" % GameState.active_research_time_left
+		button_text = "Active"
+		disabled = true
+	elif research_id in GameState.research_queue:
+		var position = GameState.research_queue.find(research_id) + 1
+		status_text = "⏳ Queued (#%d)" % position
+		button_text = "Queued"
+		disabled = true
+	else:
+		var tier = item.get("tier", 0)
+		if tier > tier_unlocked:
+			status_text = "🔒 Locked (Tier %d required)" % tier
+			button_text = "Locked"
+			disabled = true
+		else:
+			var prereqs = item.get("prerequisites", [])
+			var missing = []
+			for prereq in prereqs:
+				if not GameState.completed_research.get(prereq, false):
+					missing.append(prereq)
+			if missing.size() > 0:
+				status_text = "🔒 Locked (Missing prereqs)"
+				button_text = "Locked"
+				disabled = true
+			else:
+				status_text = "Available"
+				button_text = "Start Research"
+	
+	return {
+		"text": status_text,
+		"progress": progress_text,
+		"button_text": button_text,
+		"disabled": disabled
+	}
+
+func _update_tech_button_state():
+	var tech_btn = find_child("TechButton", true, false)
+	if tech_btn:
+		tech_btn.disabled = GameState.get_research_tier_unlocked() <= 0
 
 func _create_draggable_window(title: String, size: Vector2, pos: Vector2) -> Dictionary:
 	"""Create draggable window - returns dict with window and content"""
@@ -652,6 +846,9 @@ func _on_demolish_requested(grid_pos: Vector2i):
 	# Remove building visually
 	if building_manager:
 		building_manager.demolish_building(grid_pos)
+		if building_id in ["building_research", "ship_research", "tech_research"]:
+			_update_tech_button_state()
+			_refresh_research_ui()
 	
 	print("💥 Building demolished at %s" % grid_pos)
 
@@ -679,6 +876,9 @@ func _on_info_requested(grid_pos: Vector2i):
 func _on_building_placed(building_id: String, grid_pos: Vector2i):
 	"""Handle building placement - hide tooltip"""
 	hide_placement_tooltip()
+	if building_id in ["building_research", "ship_research", "tech_research"]:
+		_update_tech_button_state()
+		_refresh_research_ui()
 
 #extends Control
 #class_name CleanModernUI

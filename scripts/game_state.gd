@@ -31,15 +31,27 @@ var ship_fuel_capacity: int = 100
 # Building efficiency (based on energy/biomatter)
 var global_efficiency: float = 1.0  # 0.0 to 1.0
 
+# Research system
+var completed_research: Dictionary = {}  # {research_id: true}
+var research_queue: Array[String] = []
+var active_research_id: String = ""
+var active_research_time_left: float = 0.0
+
+var extraction_rate_modifiers: Dictionary = {}  # {building_id: multiplier}
+var upkeep_modifiers: Dictionary = {}  # {building_id: {resource_id: multiplier}}
+
 signal resources_changed(resource_id: String, amount: int)
 signal space_travel_unlocked_signal()
 signal efficiency_changed(new_efficiency: float)
 signal production_rate_changed()
+signal research_queue_changed()
+signal research_progress_changed(active_id: String, time_left: float)
 
 func _ready():
 	_initialize_resources()
 	_initialize_storage_limits()
 	_initialize_tracking()
+	_initialize_research()
 
 func _initialize_storage_limits():
 	"""Set default storage limits"""
@@ -74,6 +86,128 @@ func _initialize_tracking():
 	for resource in GameData.resources:
 		production_rates[resource.id] = 0.0
 		consumption_rates[resource.id] = 0.0
+
+func _initialize_research():
+	"""Initialize research tracking"""
+	for item in GameData.research:
+		completed_research[item.id] = false
+
+func get_research_tier_unlocked() -> int:
+	"""Tier unlocked based on research buildings placed"""
+	return _get_research_building_count()
+
+func _get_research_building_count() -> int:
+	"""Count research buildings placed in the world"""
+	var count = 0
+	var building_manager = get_tree().root.get_node_or_null("PlanetSurface/BuildingManager")
+	var tile_grid = get_tree().root.get_node_or_null("PlanetSurface/TileGrid")
+	if building_manager and tile_grid and "placed_buildings" in building_manager:
+		for grid_pos in building_manager.placed_buildings:
+			var tile_info = tile_grid.get_tile_info(grid_pos)
+			var building_id = tile_info.get("building", "")
+			if building_id in ["building_research", "ship_research", "tech_research"]:
+				count += 1
+	return count
+
+func can_start_research(research_id: String) -> bool:
+	"""Check if a research item can be queued"""
+	var item = GameData.get_research_by_id(research_id)
+	if item.is_empty():
+		return false
+	if completed_research.get(research_id, false):
+		return false
+	var tier_unlocked = get_research_tier_unlocked()
+	if tier_unlocked == 0:
+		return false
+	if item.get("tier", 0) > tier_unlocked:
+		return false
+	for prereq in item.get("prerequisites", []):
+		if not completed_research.get(prereq, false):
+			return false
+	return true
+
+func queue_research(research_id: String) -> bool:
+	"""Queue a research item if possible"""
+	if not can_start_research(research_id):
+		return false
+	if research_id in research_queue or research_id == active_research_id:
+		return false
+	research_queue.append(research_id)
+	research_queue_changed.emit()
+	_try_start_next_research()
+	return true
+
+func _try_start_next_research():
+	"""Start next research if none active"""
+	if active_research_id != "":
+		return
+	if research_queue.is_empty():
+		return
+	var next_id = research_queue.pop_front()
+	var item = GameData.get_research_by_id(next_id)
+	if item.is_empty():
+		return
+	var cost = item.get("cost", {})
+	if cost.size() > 0:
+		if not has_resources(cost):
+			# Put it back and wait for resources
+			research_queue.push_front(next_id)
+			research_queue_changed.emit()
+			return
+		deduct_resources(cost)
+	active_research_id = next_id
+	active_research_time_left = item.get("time", 0.0)
+	research_progress_changed.emit(active_research_id, active_research_time_left)
+
+func tick_research(delta: float):
+	"""Advance research timer"""
+	if active_research_id == "":
+		_try_start_next_research()
+		return
+	if active_research_time_left <= 0.0:
+		_complete_active_research()
+		return
+	active_research_time_left = max(active_research_time_left - delta, 0.0)
+	research_progress_changed.emit(active_research_id, active_research_time_left)
+	if active_research_time_left <= 0.0:
+		_complete_active_research()
+
+func _complete_active_research():
+	"""Complete the active research and apply effects"""
+	if active_research_id == "":
+		return
+	var completed_id = active_research_id
+	var item = GameData.get_research_by_id(completed_id)
+	completed_research[completed_id] = true
+	active_research_id = ""
+	active_research_time_left = 0.0
+	_apply_research_effects(item.get("effects", []))
+	var resource_tracker = get_tree().root.get_node_or_null("PlanetSurface/ResourceTracker")
+	if resource_tracker:
+		resource_tracker._recalculate_rates()
+	research_progress_changed.emit("", 0.0)
+	research_queue_changed.emit()
+	_try_start_next_research()
+
+func _apply_research_effects(effects: Array):
+	"""Apply research effects to game state"""
+	for effect in effects:
+		match effect.get("type", ""):
+			"extraction_rate_multiplier":
+				var building_id = effect.get("building_id", "")
+				var multiplier = float(effect.get("multiplier", 1.0))
+				if building_id != "":
+					var current = extraction_rate_modifiers.get(building_id, 1.0)
+					extraction_rate_modifiers[building_id] = current * multiplier
+			"upkeep_multiplier":
+				var building_id = effect.get("building_id", "")
+				var resource_id = effect.get("resource_id", "")
+				var multiplier = float(effect.get("multiplier", 1.0))
+				if building_id != "" and resource_id != "":
+					if building_id not in upkeep_modifiers:
+						upkeep_modifiers[building_id] = {}
+					var current = upkeep_modifiers[building_id].get(resource_id, 1.0)
+					upkeep_modifiers[building_id][resource_id] = current * multiplier
 
 func increase_storage(amount: int):
 	"""Called when warehouses are built"""
@@ -228,7 +362,11 @@ func get_save_data() -> Dictionary:
 		"current_planet_id": current_planet_id,
 		"space_travel_unlocked": space_travel_unlocked,
 		"ship_fuel": ship_fuel,
-		"ship_fuel_capacity": ship_fuel_capacity
+		"ship_fuel_capacity": ship_fuel_capacity,
+		"completed_research": completed_research,
+		"research_queue": research_queue,
+		"active_research_id": active_research_id,
+		"active_research_time_left": active_research_time_left
 	}
 
 func load_save_data(data: Dictionary):
@@ -237,3 +375,7 @@ func load_save_data(data: Dictionary):
 	space_travel_unlocked = data.get("space_travel_unlocked", false)
 	ship_fuel = data.get("ship_fuel", 0)
 	ship_fuel_capacity = data.get("ship_fuel_capacity", 100)
+	completed_research = data.get("completed_research", completed_research)
+	research_queue = data.get("research_queue", research_queue)
+	active_research_id = data.get("active_research_id", "")
+	active_research_time_left = data.get("active_research_time_left", 0.0)
