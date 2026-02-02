@@ -765,14 +765,17 @@ func _update_resource_display(res_id: String = "", amount: int = 0):
 		if rate_label:
 			var net = GameState.get_net_rate(res_id2)
 			var net_per_sec = net / 60.0  # Convert from per-minute to per-second
+			var precision = 2
+			if abs(net_per_sec) < 0.1:
+				precision = 3
 			if net_per_sec > 0.01:
-				rate_label.text = "+%.2f/s" % net_per_sec
+				rate_label.text = "+%.*f/s" % [precision, net_per_sec]
 				rate_label.add_theme_color_override("font_color", Color.GREEN)
 			elif net_per_sec < -0.01:
-				rate_label.text = "%.2f/s" % net_per_sec
+				rate_label.text = "%.*f/s" % [precision, net_per_sec]
 				rate_label.add_theme_color_override("font_color", Color.RED)
 			else:
-				rate_label.text = "0.00/s"
+				rate_label.text = "%.*f/s" % [precision, 0.0]
 				rate_label.add_theme_color_override("font_color", Color.GRAY)
 	
 	# Update resources window if open
