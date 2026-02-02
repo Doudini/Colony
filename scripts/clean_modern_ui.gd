@@ -251,7 +251,8 @@ func _create_bottom_panel():
 		{"id": "production", "name": "🏭 Produce"},
 		{"id": "storage", "name": "📦 Store"},
 		{"id": "infrastructure", "name": "🏗️ Build"},
-		{"id": "research", "name": "🔬 Research"}
+		{"id": "research", "name": "🔬 Research"},
+		{"id": "social", "name": "🎭 Social"}
 	]
 	
 	for cat in categories:
@@ -441,6 +442,8 @@ func _create_tech_window():
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	window_data["content"].add_child(scroll)
 	
 	scroll.gui_input.connect(func(event):
@@ -478,7 +481,7 @@ func _create_tech_window():
 		var tier_items: Array = tiers[tier]
 		for item in tier_items:
 			var panel = PanelContainer.new()
-			panel.custom_minimum_size.y = 140
+			panel.custom_minimum_size.y = 70
 			tier_vbox.add_child(panel)
 			
 			var margin = MarginContainer.new()
@@ -489,54 +492,19 @@ func _create_tech_window():
 			panel.add_child(margin)
 			
 			var vbox = VBoxContainer.new()
-			vbox.add_theme_constant_override("separation", 6)
+			vbox.add_theme_constant_override("separation", 4)
 			margin.add_child(vbox)
-			
-			var name_label = Label.new()
-			name_label.text = item.name
-			name_label.add_theme_font_size_override("font_size", 13)
-			vbox.add_child(name_label)
-			
-			var desc_label = Label.new()
-			desc_label.text = item.description
-			desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-			desc_label.add_theme_font_size_override("font_size", 10)
-			desc_label.add_theme_color_override("font_color", Color.GRAY)
-			vbox.add_child(desc_label)
-			
-			var cost_text = _format_research_cost(item.get("cost", {}))
-			if cost_text != "":
-				var cost_label = Label.new()
-				cost_label.text = "Cost: %s" % cost_text
-				cost_label.add_theme_font_size_override("font_size", 10)
-				vbox.add_child(cost_label)
-			
-			var time_label = Label.new()
-			time_label.text = "Time: %.0fs" % float(item.get("time", 0.0))
-			time_label.add_theme_font_size_override("font_size", 10)
-			vbox.add_child(time_label)
-			
-			var status_label = Label.new()
-			status_label.name = "Status_" + item.id
-			status_label.add_theme_font_size_override("font_size", 10)
-			vbox.add_child(status_label)
-			
-			var progress_label = Label.new()
-			progress_label.name = "Progress_" + item.id
-			progress_label.add_theme_font_size_override("font_size", 10)
-			progress_label.add_theme_color_override("font_color", Color(0.6, 0.9, 1.0))
-			vbox.add_child(progress_label)
 			
 			var action_btn = Button.new()
 			action_btn.name = "ResearchBtn_" + item.id
-			action_btn.text = "Start Research"
+			action_btn.text = item.name
+			action_btn.autowrap_mode = TextServer.AUTOWRAP_WORD
+			action_btn.custom_minimum_size = Vector2(220, 40)
 			action_btn.pressed.connect(_on_research_button_pressed.bind(item.id))
 			vbox.add_child(action_btn)
 			
 			research_ui_nodes[item.id] = {
-				"button": action_btn,
-				"status": status_label,
-				"progress": progress_label
+				"button": action_btn
 			}
 	
 	_refresh_research_ui()
@@ -563,63 +531,69 @@ func _refresh_research_ui():
 		if item.id not in research_ui_nodes:
 			continue
 		var nodes: Dictionary = research_ui_nodes[item.id]
-		var status_label: Label = nodes.get("status", null)
-		var progress_label: Label = nodes.get("progress", null)
 		var button: Button = nodes.get("button", null)
-		if not (is_instance_valid(status_label) and is_instance_valid(progress_label) and is_instance_valid(button)):
+		if not is_instance_valid(button):
 			continue
 		
 		var status = _get_research_status(item)
-		status_label.text = status.text
-		progress_label.text = status.progress
 		button.disabled = status.disabled
 		button.text = status.button_text
+		button.tooltip_text = _build_research_tooltip(item, status)
+		button.disabled = status.disabled
 
 func _get_research_status(item: Dictionary) -> Dictionary:
 	var research_id = item.id
 	var tier_unlocked = GameState.get_research_tier_unlocked()
 	var status_text = ""
 	var progress_text = ""
-	var button_text = "Start Research"
+	var level = GameState.get_research_level(research_id)
+	var max_level = int(item.get("max_level", 1))
+	var button_text = "%s (%d/%d)" % [item.name, level, max_level]
 	var disabled = false
 	
 	if tier_unlocked == 0:
 		status_text = "🔒 Build research labs to unlock"
-		button_text = "Locked"
+		button_text = "%s (Locked)" % item.name
 		disabled = true
-	elif GameState.completed_research.get(research_id, false):
+	elif level >= max_level:
 		status_text = "✅ Completed"
-		button_text = "Completed"
+		button_text = "%s (Complete)" % item.name
 		disabled = true
 	elif GameState.active_research_id == research_id:
 		status_text = "🔬 Researching"
 		progress_text = "Time left: %.0fs" % GameState.active_research_time_left
-		button_text = "Active"
+		button_text = "%s (Active)" % item.name
 		disabled = true
 	elif research_id in GameState.research_queue:
 		var position = GameState.research_queue.find(research_id) + 1
 		status_text = "⏳ Queued (#%d)" % position
-		button_text = "Queued"
+		button_text = "%s (Queued)" % item.name
 		disabled = true
 	else:
 		var tier = item.get("tier", 0)
 		if tier > tier_unlocked:
 			status_text = "🔒 Locked (Tier %d required)" % tier
-			button_text = "Locked"
+			button_text = "%s (Locked)" % item.name
 			disabled = true
 		else:
 			var prereqs = item.get("prerequisites", [])
 			var missing = []
 			for prereq in prereqs:
-				if not GameState.completed_research.get(prereq, false):
-					missing.append(prereq)
+				if prereq is Dictionary:
+					var prereq_id = prereq.get("id", "")
+					var prereq_level = int(prereq.get("level", 1))
+					if GameState.get_research_level(prereq_id) < prereq_level:
+						missing.append("%s L%d" % [prereq_id, prereq_level])
+				else:
+					if GameState.get_research_level(prereq) < 1:
+						missing.append(prereq)
 			if missing.size() > 0:
 				status_text = "🔒 Locked (Missing prereqs)"
-				button_text = "Locked"
+				button_text = "%s (Locked)" % item.name
 				disabled = true
 			else:
 				status_text = "Available"
-				button_text = "Start Research"
+				button_text = "%s (%d/%d)" % [item.name, level, max_level]
 	
 	return {
 		"text": status_text,
@@ -627,6 +601,26 @@ func _get_research_status(item: Dictionary) -> Dictionary:
 		"button_text": button_text,
 		"disabled": disabled
 	}
+
+func _build_research_tooltip(item: Dictionary, status: Dictionary) -> String:
+	var research_id = item.id
+	var level = GameState.get_research_level(research_id)
+	var max_level = int(item.get("max_level", 1))
+	var next_level = min(level + 1, max_level)
+	var cost = GameState.get_research_cost(item, next_level)
+	var time = GameState.get_research_time(item, next_level)
+	var cost_text = _format_research_cost(cost)
+	var lines = []
+	lines.append(item.name)
+	lines.append("Level: %d/%d" % [level, max_level])
+	lines.append(item.description)
+	lines.append(status.text)
+	if level < max_level:
+		if cost_text != "":
+			lines.append("Cost: %s" % cost_text)
+		if time > 0.0:
+			lines.append("Time: %.0fs" % time)
+	return "\n".join(lines)
 
 func _update_tech_button_state():
 	var tech_btn = find_child("TechButton", true, false)

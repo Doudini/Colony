@@ -718,20 +718,23 @@ func _initialize_research():
 		{
 			"id": "miner_extraction_boost",
 			"name": "Improved Drill Heads",
-			"description": "Upgrade miner tooling for faster extraction.",
+			"description": "Foundational tooling upgrades for miners.",
 			"tier": 0,
 			"branch": "building",
 			"time": 30.0,
+			"time_scale": 0.2,
 			"cost": {
 				"minerals": 25,
 				"energy": 10
 			},
+			"cost_scale": 0.25,
+			"max_level": 1,
 			"prerequisites": [],
 			"effects": [
 				{
 					"type": "extraction_rate_multiplier",
 					"building_id": "miner",
-					"multiplier": 1.2
+					"multiplier": 1.1
 				}
 			]
 		},
@@ -742,17 +745,165 @@ func _initialize_research():
 			"tier": 0,
 			"branch": "building",
 			"time": 40.0,
+			"time_scale": 0.2,
 			"cost": {
 				"minerals": 20,
 				"biomatter": 10
 			},
+			"cost_scale": 0.25,
+			"max_level": 1,
 			"prerequisites": ["miner_extraction_boost"],
 			"effects": [
 				{
 					"type": "upkeep_multiplier",
 					"building_id": "miner",
 					"resource_id": "biomatter",
-					"multiplier": 0.8
+					"multiplier": 0.9
+				}
+			]
+		},
+		{
+			"id": "drill_optimization",
+			"name": "Drill Optimization",
+			"description": "Tuning passes for driller throughput (stackable).",
+			"tier": 1,
+			"branch": "building",
+			"time": 45.0,
+			"time_scale": 0.25,
+			"cost": {
+				"minerals": 40,
+				"energy": 20
+			},
+			"cost_scale": 0.3,
+			"max_level": 4,
+			"prerequisites": ["miner_extraction_boost"],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.05
+				}
+			]
+		},
+		{
+			"id": "drill_output_focus",
+			"name": "Drill Output Focus",
+			"description": "Sharper extraction profile for concentrated yields.",
+			"tier": 1,
+			"branch": "building",
+			"time": 50.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 35,
+				"energy": 25
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "drill_optimization", "level": 2}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.05
+				}
+			]
+		},
+		{
+			"id": "forestry_efficiency",
+			"name": "Forestry Efficiency",
+			"description": "Improved cutting patterns for foresters.",
+			"tier": 1,
+			"branch": "building",
+			"time": 40.0,
+			"time_scale": 0.2,
+			"cost": {
+				"wood": 20,
+				"energy": 15
+			},
+			"cost_scale": 0.25,
+			"max_level": 3,
+			"prerequisites": [],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "forester",
+					"multiplier": 1.04
+				}
+			]
+		},
+		{
+			"id": "biomatter_reclaimers",
+			"name": "Biomatter Reclaimers",
+			"description": "Recover biomatter loss across extractor crews.",
+			"tier": 1,
+			"branch": "building",
+			"time": 55.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 30,
+				"biomatter": 15
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": ["miner_biomatter_efficiency"],
+			"effects": [
+				{
+					"type": "upkeep_multiplier",
+					"building_id": "miner",
+					"resource_id": "biomatter",
+					"multiplier": 0.95
+				}
+			]
+		},
+		{
+			"id": "deep_core_drilling",
+			"name": "Deep-Core Drilling",
+			"description": "Advanced rigs unlock higher throughput.",
+			"tier": 2,
+			"branch": "building",
+			"time": 70.0,
+			"time_scale": 0.25,
+			"cost": {
+				"metal": 40,
+				"energy": 30
+			},
+			"cost_scale": 0.3,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "drill_optimization", "level": 4}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.08
+				}
+			]
+		},
+		{
+			"id": "extractor_networks",
+			"name": "Extractor Networks",
+			"description": "Coordinated logistics reduce downtime.",
+			"tier": 2,
+			"branch": "building",
+			"time": 60.0,
+			"time_scale": 0.2,
+			"cost": {
+				"components": 20,
+				"energy": 20
+			},
+			"cost_scale": 0.3,
+			"max_level": 3,
+			"prerequisites": [
+				{"id": "drill_output_focus", "level": 1}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.04
 				}
 			]
 		}

@@ -33,6 +33,7 @@ var global_efficiency: float = 1.0  # 0.0 to 1.0
 
 # Research system
 var completed_research: Dictionary = {}  # {research_id: true}
+var research_levels: Dictionary = {}  # {research_id: level}
 var research_queue: Array[String] = []
 var active_research_id: String = ""
 var active_research_time_left: float = 0.0
@@ -91,6 +92,26 @@ func _initialize_research():
 	"""Initialize research tracking"""
 	for item in GameData.research:
 		completed_research[item.id] = false
+		research_levels[item.id] = 0
+
+func get_research_level(research_id: String) -> int:
+	return research_levels.get(research_id, 0)
+
+func get_research_time(item: Dictionary, level: int) -> float:
+	var base_time = float(item.get("time", 0.0))
+	var scale = float(item.get("time_scale", 0.0))
+	return base_time * (1.0 + scale * max(level - 1, 0))
+
+func get_research_cost(item: Dictionary, level: int) -> Dictionary:
+	var base_cost = item.get("cost", {})
+	var scale = float(item.get("cost_scale", 0.0))
+	if base_cost.is_empty():
+		return {}
+	var multiplier = 1.0 + scale * max(level - 1, 0)
+	var cost = {}
+	for res_id in base_cost:
+		cost[res_id] = int(ceil(float(base_cost[res_id]) * multiplier))
+	return cost
 
 func get_research_tier_unlocked() -> int:
 	"""Tier unlocked based on research buildings placed"""
@@ -114,7 +135,9 @@ func can_start_research(research_id: String) -> bool:
 	var item = GameData.get_research_by_id(research_id)
 	if item.is_empty():
 		return false
-	if completed_research.get(research_id, false):
+	var level = get_research_level(research_id)
+	var max_level = int(item.get("max_level", 1))
+	if level >= max_level:
 		return false
 	var tier_unlocked = get_research_tier_unlocked()
 	if tier_unlocked == 0:
@@ -122,8 +145,14 @@ func can_start_research(research_id: String) -> bool:
 	if item.get("tier", 0) > tier_unlocked:
 		return false
 	for prereq in item.get("prerequisites", []):
-		if not completed_research.get(prereq, false):
-			return false
+		if prereq is Dictionary:
+			var prereq_id = prereq.get("id", "")
+			var prereq_level = int(prereq.get("level", 1))
+			if get_research_level(prereq_id) < prereq_level:
+				return false
+		else:
+			if get_research_level(prereq) < 1:
+				return false
 	return true
 
 func queue_research(research_id: String) -> bool:
@@ -147,7 +176,8 @@ func _try_start_next_research():
 	var item = GameData.get_research_by_id(next_id)
 	if item.is_empty():
 		return
-	var cost = item.get("cost", {})
+	var level = get_research_level(next_id) + 1
+	var cost = get_research_cost(item, level)
 	if cost.size() > 0:
 		if not has_resources(cost):
 			# Put it back and wait for resources
@@ -156,7 +186,7 @@ func _try_start_next_research():
 			return
 		deduct_resources(cost)
 	active_research_id = next_id
-	active_research_time_left = item.get("time", 0.0)
+	active_research_time_left = get_research_time(item, level)
 	research_progress_changed.emit(active_research_id, active_research_time_left)
 
 func tick_research(delta: float):
@@ -178,7 +208,11 @@ func _complete_active_research():
 		return
 	var completed_id = active_research_id
 	var item = GameData.get_research_by_id(completed_id)
-	completed_research[completed_id] = true
+	var level = get_research_level(completed_id) + 1
+	research_levels[completed_id] = level
+	var max_level = int(item.get("max_level", 1))
+	if level >= max_level:
+		completed_research[completed_id] = true
 	active_research_id = ""
 	active_research_time_left = 0.0
 	_apply_research_effects(item.get("effects", []))
@@ -364,6 +398,7 @@ func get_save_data() -> Dictionary:
 		"ship_fuel": ship_fuel,
 		"ship_fuel_capacity": ship_fuel_capacity,
 		"completed_research": completed_research,
+		"research_levels": research_levels,
 		"research_queue": research_queue,
 		"active_research_id": active_research_id,
 		"active_research_time_left": active_research_time_left
@@ -376,6 +411,7 @@ func load_save_data(data: Dictionary):
 	ship_fuel = data.get("ship_fuel", 0)
 	ship_fuel_capacity = data.get("ship_fuel_capacity", 100)
 	completed_research = data.get("completed_research", completed_research)
+	research_levels = data.get("research_levels", research_levels)
 	research_queue = data.get("research_queue", research_queue)
 	active_research_id = data.get("active_research_id", "")
 	active_research_time_left = data.get("active_research_time_left", 0.0)
