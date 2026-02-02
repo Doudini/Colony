@@ -113,6 +113,10 @@ func show_building_info(building_id: String, grid_pos: Vector2i):
 		var upkeep_text = "Upkeep:\n"
 		for res_id in upkeep:
 			var amount = upkeep[res_id]
+			var modifier = 1.0
+			if building_id in GameState.upkeep_modifiers:
+				modifier = GameState.upkeep_modifiers[building_id].get(res_id, 1.0)
+			amount *= modifier
 			var res_data = GameData.get_resource_by_id(res_id)
 			upkeep_text += "  - %s: %.1f/min\n" % [res_data.name, amount]
 		upkeep_label.text = upkeep_text.strip_edges()

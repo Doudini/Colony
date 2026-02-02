@@ -14,6 +14,7 @@ var placement_tooltip: PlacementTooltip
 var miner_warning: MisplacedMinerWarning
 var building_control: BuildingControl
 var research_ui_nodes: Dictionary = {}  # {research_id: {button, status, progress}}
+var top_bar_resources: Array[String] = []
 
 func _ready():
 	_build_ui()
@@ -166,8 +167,8 @@ func _create_top_bar():
 	margin.add_child(hbox)
 	
 	# Essential resources only
-	var essential = ["food", "water", "wood", "minerals", "hydrogen", "biomatter", "energy"]
-	for res_id in essential:
+	top_bar_resources = ["food", "water", "wood", "minerals", "hydrogen", "biomatter", "energy"]
+	for res_id in top_bar_resources:
 		var res_data = GameData.get_resource_by_id(res_id)
 		if res_data.is_empty():
 			continue
@@ -503,8 +504,15 @@ func _create_tech_window():
 			action_btn.pressed.connect(_on_research_button_pressed.bind(item.id))
 			vbox.add_child(action_btn)
 			
+			var status_label = Label.new()
+			status_label.name = "ResearchStatus_" + item.id
+			status_label.add_theme_font_size_override("font_size", 10)
+			status_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+			vbox.add_child(status_label)
+			
 			research_ui_nodes[item.id] = {
-				"button": action_btn
+				"button": action_btn,
+				"status": status_label
 			}
 	
 	_refresh_research_ui()
@@ -532,14 +540,17 @@ func _refresh_research_ui():
 			continue
 		var nodes: Dictionary = research_ui_nodes[item.id]
 		var button: Button = nodes.get("button", null)
-		if not is_instance_valid(button):
+		var status_label: Label = nodes.get("status", null)
+		if not (is_instance_valid(button) and is_instance_valid(status_label)):
 			continue
 		
 		var status = _get_research_status(item)
 		button.disabled = status.disabled
 		button.text = status.button_text
 		button.tooltip_text = _build_research_tooltip(item, status)
-		button.disabled = status.disabled
+		status_label.text = status.text
+		if status.progress != "":
+			status_label.text = "%s • %s" % [status.text, status.progress]
 
 func _get_research_status(item: Dictionary) -> Dictionary:
 	var research_id = item.id
@@ -700,7 +711,7 @@ func _create_draggable_window(title: String, size: Vector2, pos: Vector2, window
 func _update_resource_display(res_id: String = "", amount: int = 0):
 	"""Update all resource displays"""
 	# Update top bar
-	for res_id2 in ["minerals", "hydrogen", "biomatter", "energy"]:
+	for res_id2 in top_bar_resources:
 		var amount_label = find_child("Amount_" + res_id2, true, false)
 		if amount_label:
 			amount_label.text = str(GameState.resources.get(res_id2, 0))
