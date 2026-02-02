@@ -14,6 +14,7 @@ var selected_building_id: String = ""
 
 # Track extraction timers so we can stop them
 var extraction_timers: Dictionary = {}  # {grid_pos: Timer}
+var extraction_accumulators: Dictionary = {}  # {grid_pos: float}
 
 # Store original building colors and emission for resume
 var building_materials: Dictionary = {}  # {grid_pos: {albedo: Color, emission: Color, emission_enabled: bool}}
@@ -341,7 +342,7 @@ func _create_building(grid_pos: Vector2i, building_id: String):
 			var tile_info = tile_grid.get_tile_info(grid_pos)
 			var resource = tile_info.get("resource", null)
 			if resource:
-				tracker.register_extractor(grid_pos, resource, building_data.extraction_rate)
+				tracker.register_extractor(grid_pos, building_id, resource, building_data.extraction_rate)
 		
 		if building_data.get("production", {}).size() > 0:
 			tracker.register_producer(grid_pos, building_id)
@@ -426,13 +427,14 @@ func _start_extraction(grid_pos: Vector2i, building_id: String):
 	
 	var timer = Timer.new()
 	timer.wait_time = 10.0
-	timer.timeout.connect(_on_extraction_tick.bind(grid_pos, resource_on_tile, extraction_rate / 6.0))
+	timer.timeout.connect(_on_extraction_tick.bind(grid_pos, building_id, resource_on_tile, extraction_rate / 6.0))
 	timer.autostart = true
 	add_child(timer)
 	
 	extraction_timers[grid_pos] = timer
+	extraction_accumulators[grid_pos] = 0.0
 
-func _on_extraction_tick(grid_pos: Vector2i, resource_id: String, rate: float):
+func _on_extraction_tick(grid_pos: Vector2i, building_id: String, resource_id: String, rate: float):
 	"""Handle one extraction tick"""
 	var building_control = get_tree().root.get_node_or_null("PlanetSurface/BuildingControl")
 	if building_control and building_control.is_paused(grid_pos):
@@ -442,7 +444,12 @@ func _on_extraction_tick(grid_pos: Vector2i, resource_id: String, rate: float):
 	# If upkeep can't be paid, efficiency drops and this still runs (but at lower rate)
 	# For now, just extract at full rate - upkeep manager will handle shortages
 	
-	var amount = ceil(rate)
+	var multiplier = GameState.extraction_rate_modifiers.get(building_id, 1.0)
+	var buffer = extraction_accumulators.get(grid_pos, 0.0)
+	buffer += rate * multiplier
+	var amount = int(floor(buffer))
+	buffer -= amount
+	extraction_accumulators[grid_pos] = buffer
 	
 	if amount > 0:
 		GameState.add_resource(resource_id, amount)
@@ -517,6 +524,8 @@ func demolish_building(grid_pos: Vector2i) -> bool:
 		timer.stop()
 		timer.queue_free()
 		extraction_timers.erase(grid_pos)
+	if grid_pos in extraction_accumulators:
+		extraction_accumulators.erase(grid_pos)
 	
 	# Remove visual
 	var building = placed_buildings[grid_pos]
@@ -564,7 +573,7 @@ func resume_building(grid_pos: Vector2i):
 			var tile = tile_grid.get_tile_info(grid_pos)
 			var resource_id = tile.get("resource", "")
 			if resource_id != "":
-				resource_tracker.register_extractor(grid_pos, resource_id, building_data.extraction_rate)
+				resource_tracker.register_extractor(grid_pos, building_id, resource_id, building_data.extraction_rate)
 		elif not building_data.get("production", {}).is_empty():
 			resource_tracker.register_producer(grid_pos, building_id)
 	
