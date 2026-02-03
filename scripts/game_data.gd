@@ -132,7 +132,7 @@ func _initialize_resources():
 			"id": "wood",
 			"name": "Wood",
 			"description": "Raw timber extracted from forests.",
-			"color": Color(0.6, 0.4, 0.2),
+			"color": Color(0.058, 0.163, 0.005, 1.0),
 			"tier": 1,
 			"extractable": false  # Comes from forest miner
 		},
