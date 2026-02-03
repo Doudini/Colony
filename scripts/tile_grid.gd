@@ -97,6 +97,106 @@ const RESOURCE_CONFIGS := {
 }
 
 # =========================
+# TERRAIN AUTOTILING CONFIG
+# =========================
+
+# Terrain priority for transitions (higher = more dominant)
+const TERRAIN_PRIORITY := {
+	"deep_water": 100,
+	"shallow_water": 90,
+	"beach": 80,
+	"marsh": 70,
+	"grassland": 60,
+	"lowland": 60,  # Same as grassland
+	"forest": 50,
+	"ground": 40,
+	"highland": 30,
+	"mountain": 20
+}
+
+# Each terrain type transitions to a higher-priority terrain
+const TERRAIN_TRANSITIONS := {
+	"grassland": "beach",
+	"lowland": "beach",
+	"forest": "grassland",
+	"ground": "grassland",
+	"highland": "ground",
+	"mountain": "highland",
+	"marsh": "shallow_water",
+	"beach": "shallow_water"
+}
+
+# Texture atlas configuration
+# Each terrain needs a tileset in the atlas
+const ATLAS_CONFIG := {
+	"beach": {
+		"row": 0,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"grassland": {
+		"row": 1,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 5
+	},
+	"lowland": {
+		"row": 1,  # Same as grassland
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 5
+	},
+	"forest": {
+		"row": 2,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 5
+	},
+	"ground": {
+		"row": 3,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"highland": {
+		"row": 4,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"mountain": {
+		"row": 5,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"marsh": {
+		"row": 6,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"shallow_water": {
+		"row": 7,
+		"has_transitions": false,
+		"tile_count": 4,
+		"variations": 2
+	},
+	"deep_water": {
+		"row": 7,
+		"has_transitions": false,
+		"tile_count": 4,
+		"variations": 2
+	}
+}
+
+# Texture atlas settings
+const ATLAS_TILE_SIZE := 128  # Size of each tile in pixels
+const ATLAS_TILES_PER_ROW := 16  # 16 tiles per row (marching squares + variations)
+@export var terrain_atlas: Texture2D  # Assigned in editor
+
+# =========================
 # LIFECYCLE
 # =========================
 
@@ -815,6 +915,135 @@ func _grow_vein_cluster(start: Vector2i, target: int, allowed: Array, forbidden:
 # RENDERING
 # =========================
 
+# =========================
+# AUTOTILING FUNCTIONS
+# =========================
+
+func _get_autotile_index(pos: Vector2i) -> int:
+	"""
+	Returns the marching squares tile index (0-15) based on neighbors.
+	Checks 4 cardinal directions against the transition target.
+	"""
+	var tile_type = grid[pos.x][pos.y]["type"]
+
+	# If this terrain doesn't transition, use solid tile (all neighbors match)
+	if not tile_type in TERRAIN_TRANSITIONS:
+		# For water and other non-transitioning types, add variation
+		if tile_type in ["shallow_water", "deep_water"]:
+			return _get_water_variation(pos)
+		return 15  # Solid tile
+
+	var transition_to = TERRAIN_TRANSITIONS[tile_type]
+	var my_priority = TERRAIN_PRIORITY.get(tile_type, 0)
+
+	# Check 4 cardinal neighbors (N, E, S, W) for marching squares
+	var neighbors = [
+		Vector2i(0, -1),  # North
+		Vector2i(1, 0),   # East
+		Vector2i(0, 1),   # South
+		Vector2i(-1, 0)   # West
+	]
+
+	var bitmask = 0
+	for i in range(4):
+		var check_pos = pos + neighbors[i]
+
+		# Edge of map counts as matching (prevents edge artifacts)
+		if not is_valid_pos(check_pos):
+			bitmask |= (1 << (3 - i))
+			continue
+
+		var neighbor_type = grid[check_pos.x][check_pos.y]["type"]
+		var neighbor_priority = TERRAIN_PRIORITY.get(neighbor_type, 0)
+
+		# If neighbor is same type OR lower priority, we don't transition
+		# If neighbor is our transition target OR higher priority, we do transition
+		if neighbor_type == tile_type or neighbor_priority < my_priority:
+			bitmask |= (1 << (3 - i))
+
+	# For fully surrounded tiles (all neighbors same), add variation
+	if bitmask == 15:
+		return _get_tile_variation(pos, tile_type)
+
+	return bitmask
+
+func _get_tile_variation(pos: Vector2i, tile_type: String) -> int:
+	"""
+	Returns a tile index with variation for fully surrounded tiles.
+	Uses position-based pseudo-random selection for consistency.
+	"""
+	if not tile_type in ATLAS_CONFIG:
+		return 15
+
+	var config = ATLAS_CONFIG[tile_type]
+	if config["variations"] <= 0:
+		return 15
+
+	# Hash position for consistent pseudo-random variation
+	var seed_value = (pos.x * 73856093) ^ (pos.y * 19349663)
+	seed_value = abs(seed_value)
+	var variation = seed_value % config["variations"]
+
+	# Variation tiles start after the base 16 tiles
+	return 15 + variation
+
+func _get_water_variation(pos: Vector2i) -> int:
+	"""
+	Simple variation for water tiles (no transitions, just visual variety).
+	"""
+	var seed_value = (pos.x * 73856093) ^ (pos.y * 19349663)
+	seed_value = abs(seed_value)
+	return seed_value % 4  # Water has 4 simple variations
+
+func _get_tile_uv_coords(pos: Vector2i) -> Array:
+	"""
+	Returns UV coordinates [top_left, top_right, bottom_right, bottom_left]
+	for the tile at the given position based on its autotile index.
+	"""
+	var tile_type = grid[pos.x][pos.y]["type"]
+
+	if not tile_type in ATLAS_CONFIG:
+		# Fallback to a default tile
+		return _calculate_uv_for_tile(0, 0)
+
+	var config = ATLAS_CONFIG[tile_type]
+	var autotile_index = _get_autotile_index(pos)
+	var row = config["row"]
+
+	return _calculate_uv_for_tile(autotile_index, row)
+
+func _calculate_uv_for_tile(tile_index: int, atlas_row: int) -> Array:
+	"""
+	Calculates UV coordinates for a specific tile in the atlas.
+	Atlas layout: 16 tiles per row, multiple rows for different terrains.
+	Returns [top_left, top_right, bottom_right, bottom_left] UVs.
+	"""
+	# Calculate tile position in atlas
+	var tiles_per_row = ATLAS_TILES_PER_ROW
+	var col = tile_index % tiles_per_row
+	var row = atlas_row
+
+	# Assume atlas is square with tiles_per_row tiles in each direction
+	var tile_uv_size = 1.0 / float(tiles_per_row)
+
+	# Calculate UV coordinates (0,0 is top-left in UV space)
+	var u_left = col * tile_uv_size
+	var u_right = (col + 1) * tile_uv_size
+	var v_top = row * tile_uv_size
+	var v_bottom = (row + 1) * tile_uv_size
+
+	# Return as [TL, TR, BR, BL]
+	return [
+		Vector2(u_left, v_top),      # Top-left
+		Vector2(u_right, v_top),     # Top-right
+		Vector2(u_right, v_bottom),  # Bottom-right
+		Vector2(u_left, v_bottom)    # Bottom-left
+	]
+
+# =========================
+# CHUNK MESH GENERATION
+# =========================
+
 func _create_visual_grid():
 	var cx := ceili(grid_width / float(CHUNK_SIZE))
 	var cy := ceili(grid_height / float(CHUNK_SIZE))
@@ -838,8 +1067,16 @@ func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 
 	for x in range(sx, ex):
 		for y in range(sy, ey):
-			var color := _get_tile_color(grid[x][y])
-			_add_quad(st, grid_to_world(Vector2i(x, y)), color)
+			var tile_pos = Vector2i(x, y)
+
+			# Use UV mapping if texture atlas is available
+			if terrain_atlas:
+				var uv_coords = _get_tile_uv_coords(tile_pos)
+				_add_quad_with_uv(st, grid_to_world(tile_pos), uv_coords)
+			else:
+				# Fallback to vertex colors if no atlas
+				var color := _get_tile_color(grid[x][y])
+				_add_quad_with_color(st, grid_to_world(tile_pos), color)
 
 	st.generate_normals()
 
@@ -847,13 +1084,52 @@ func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 	mi.mesh = st.commit()
 
 	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
+
+	# Use texture atlas if available
+	if terrain_atlas:
+		mat.albedo_texture = terrain_atlas
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST  # Pixel art style
+		mat.texture_repeat = false
+	else:
+		# Fallback to vertex colors
+		mat.vertex_color_use_as_albedo = true
+
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	mi.material_override = mat
 
 	return mi
 
-func _add_quad(st: SurfaceTool, pos: Vector3, color: Color):
+func _add_quad_with_uv(st: SurfaceTool, pos: Vector3, uv_coords: Array):
+	"""
+	Adds a quad with UV texture coordinates.
+	uv_coords should be [top_left, top_right, bottom_right, bottom_left].
+	"""
+	var h := TILE_SIZE * 0.475
+	var v0 := Vector3(pos.x - h, 0, pos.z - h)  # Top-left
+	var v1 := Vector3(pos.x + h, 0, pos.z - h)  # Top-right
+	var v2 := Vector3(pos.x + h, 0, pos.z + h)  # Bottom-right
+	var v3 := Vector3(pos.x - h, 0, pos.z + h)  # Bottom-left
+
+	# First triangle (v0, v1, v2)
+	st.set_uv(uv_coords[0])  # Top-left UV
+	st.add_vertex(v0)
+	st.set_uv(uv_coords[1])  # Top-right UV
+	st.add_vertex(v1)
+	st.set_uv(uv_coords[2])  # Bottom-right UV
+	st.add_vertex(v2)
+
+	# Second triangle (v0, v2, v3)
+	st.set_uv(uv_coords[0])  # Top-left UV
+	st.add_vertex(v0)
+	st.set_uv(uv_coords[2])  # Bottom-right UV
+	st.add_vertex(v2)
+	st.set_uv(uv_coords[3])  # Bottom-left UV
+	st.add_vertex(v3)
+
+func _add_quad_with_color(st: SurfaceTool, pos: Vector3, color: Color):
+	"""
+	Adds a quad with vertex color (fallback when no texture atlas is available).
+	"""
 	var h := TILE_SIZE * 0.475
 	var v0 := Vector3(pos.x - h, 0, pos.z - h)
 	var v1 := Vector3(pos.x + h, 0, pos.z - h)
