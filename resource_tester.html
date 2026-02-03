@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Pipeline Tester</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e; color: #eee; min-height:100vh;
+        }
+        .container { display:flex; height:100vh; }
+        .sidebar {
+            width:320px; background:#16213e; padding:20px; overflow-y:auto;
+            border-right:2px solid #0f3460;
+        }
+        .sidebar h2 { color:#e94560; margin-bottom:15px; font-size:1.2rem; }
+        .section { margin-bottom:25px; padding:15px; background:#1a1a2e; border-radius:8px; }
+        .section h3 { color:#00d9ff; margin-bottom:10px; font-size:0.95rem; }
+        input, select, button {
+            width:100%; padding:10px; margin:5px 0; border:none; border-radius:5px; font-size:0.9rem;
+        }
+        input, select { background:#0f3460; color:#fff; }
+        input::placeholder { color:#888; }
+        button {
+            background:#e94560; color:white; cursor:pointer; transition:background 0.3s; font-weight:bold;
+        }
+        button:hover { background:#ff6b6b; }
+        button.secondary { background:#0f3460; }
+        button.secondary:hover { background:#1a4a7a; }
+        .resource-tag {
+            display:inline-block; padding:5px 10px; margin:3px; background:#0f3460; border-radius:15px; font-size:0.8rem;
+        }
+        .resource-tag .color-dot {
+            display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px;
+        }
+        .resource-tag .delete { margin-left:8px; cursor:pointer; color:#e94560; }
+        .io-row { display:flex; gap:5px; margin:5px 0; }
+        .io-row select { flex:2; }
+        .io-row input { flex:1; }
+        .io-list { margin:10px 0; font-size:0.85rem; }
+        .io-item {
+            padding:5px; background:#0f3460; margin:3px 0; border-radius:3px;
+            display:flex; justify-content:space-between; align-items:center;
+        }
+        .main-area { flex:1; display:flex; flex-direction:column; }
+        .toolbar {
+            background:#16213e; padding:10px 20px; display:flex; gap:10px; align-items:center;
+            border-bottom:2px solid #0f3460;
+        }
+        .toolbar button { width:auto; padding:8px 20px; }
+        .canvas-container {
+            flex:1; position:relative; overflow:auto;
+            background: radial-gradient(circle, #1f2937 1px, transparent 1px); background-size:25px 25px;
+        }
+        #flowchart { position:relative; width:3000px; height:2000px; }
+        svg.connections {
+            position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;
+        }
+        .node {
+            position:absolute; background:#16213e; border:2px solid #0f3460; border-radius:10px;
+            padding:15px; min-width:180px; cursor:move; user-select:none;
+            box-shadow:0 4px 15px rgba(0,0,0,0.3);
+        }
+        .node:hover { border-color:#e94560; }
+        .node.selected { border-color:#00d9ff; box-shadow:0 0 20px rgba(0,217,255,0.3); }
+        .node-header {
+            display:flex; justify-content:space-between; align-items:center;
+            margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #0f3460;
+        }
+        .node-title { font-weight:bold; color:#00d9ff; }
+        .node-delete { color:#e94560; cursor:pointer; font-size:1.2rem; }
+        .node-content { font-size:0.85rem; }
+        .node-inputs h4, .node-outputs h4 { font-size:0.75rem; margin-bottom:5px; }
+        .node-inputs h4 { color:#ff9f43; }
+        .node-outputs h4 { color:#26de81; }
+        .resource-flow { display:flex; align-items:center; padding:3px 0; }
+        .resource-flow .color-dot { width:8px; height:8px; border-radius:50%; margin-right:8px; }
+        .connection-point {
+            position:absolute; width:14px; height:14px; border:2px solid #fff; border-radius:50%; cursor:crosshair;
+        }
+        .connection-point.input  { left:-7px; background:#ff9f43; }
+        .connection-point.output { right:-7px; background:#26de81; }
+        .stats-panel {
+            position:fixed; bottom:20px; right:20px; background:#16213e; padding:20px;
+            border-radius:10px; border:2px solid #0f3460; min-width:250px; z-index:10;
+        }
+        .stats-panel h3 { color:#e94560; margin-bottom:15px; }
+        .stat-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #0f3460; }
+        .stat-positive { color:#26de81; }
+        .stat-negative { color:#e94560; }
+        .stat-neutral   { color:#888; }
+        .capacity-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; font-size:0.9rem; }
+        #editModal {
+            display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000;
+            justify-content:center; align-items:center;
+        }
+        #editModal .modal-content {
+            background:#16213e; padding:25px; border-radius:12px; width:480px; max-height:85vh;
+            overflow-y:auto; border:2px solid #0f3460;
+        }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+        .node.active { animation:pulse 1s infinite; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>🏭 Production Pipeline Tester</h2>
+
+            <!-- Resources -->
+            <div class="section">
+                <h3>📦 Resources</h3>
+                <input type="text" id="resourceName" placeholder="Resource name (e.g., Wood)">
+                <input type="color" id="resourceColor" value="#e94560">
+                <button onclick="addResource()">Add Resource</button>
+                <div id="resourceList" style="margin:10px 0;"></div>
+
+                <div style="margin-top:15px;">
+                    <h4 style="color:#00d9ff; font-size:0.9rem; margin-bottom:8px;">Storage Capacity</h4>
+                    <div id="capacityList"></div>
+                </div>
+            </div>
+
+            <!-- Add Building -->
+            <div class="section">
+                <h3>🏗️ Add Building</h3>
+                <input type="text" id="buildingName" placeholder="Building name">
+
+                <div style="margin-top:10px;">
+                    <label style="font-size:0.85rem; color:#ff9f43;">Inputs:</label>
+                    <div class="io-row">
+                        <select id="inputResource"></select>
+                        <input type="number" id="inputAmount" placeholder="Amt" min="0" value="1">
+                        <button onclick="addBuildingInput()" style="width:40px;">+</button>
+                    </div>
+                    <div id="buildingInputs" class="io-list"></div>
+                </div>
+
+                <div style="margin-top:10px;">
+                    <label style="font-size:0.85rem; color:#26de81;">Outputs:</label>
+                    <div class="io-row">
+                        <select id="outputResource"></select>
+                        <input type="number" id="outputAmount" placeholder="Amt" min="0" value="1">
+                        <button onclick="addBuildingOutput()" style="width:40px;">+</button>
+                    </div>
+                    <div id="buildingOutputs" class="io-list"></div>
+                </div>
+
+                <input type="number" id="buildingTime" placeholder="Production time (seconds)" min="0.1" step="0.1" value="1">
+                <button onclick="addBuilding()">Add Building to Chart</button>
+            </div>
+
+            <!-- Templates & Clear -->
+            <div class="section">
+                <h3>📋 Quick Actions</h3>
+                <button class="secondary" onclick="loadTemplate('factory')">Load Factory Example</button>
+                <button class="secondary" onclick="clearAll()">Clear Everything</button>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div class="toolbar">
+                <button onclick="autoLayout()">📐 Auto Layout</button>
+                <button onclick="analyzeChain()">📊 Analyze</button>
+                <button onclick="exportConfig()">💾 Export</button>
+                <button onclick="importConfig()">📁 Import</button>
+                <span style="margin-left:auto; color:#888;">Double-click node to edit • Drag to move</span>
+            </div>
+            <div class="canvas-container">
+                <div id="flowchart">
+                    <svg class="connections" id="connectionsSvg"></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Panel -->
+    <div class="stats-panel" id="statsPanel">
+        <h3>📊 Resource Balance</h3>
+        <div id="statsContent">
+            <p style="color:#888;">Add buildings to begin simulation</p>
+        </div>
+        <div style="margin-top:15px; padding-top:15px; border-top:2px solid #0f3460;">
+            <button onclick="toggleSimulation()" id="simButton">▶️ Start Simulation</button>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal">
+        <div class="modal-content">
+            <h2 style="color:#e94560; margin-bottom:20px;">Edit Building</h2>
+
+            <input type="text" id="editName" placeholder="Building name" style="margin-bottom:15px;">
+
+            <div style="margin:15px 0;">
+                <label style="color:#ff9f43; display:block; margin-bottom:6px;">Inputs</label>
+                <div id="editInputsList" class="io-list"></div>
+                <div class="io-row" style="margin-top:10px;">
+                    <select id="editInputResource"></select>
+                    <input type="number" id="editInputAmount" min="0" value="1" style="width:80px;">
+                    <button onclick="addEditInput()" style="width:50px;">+</button>
+                </div>
+            </div>
+
+            <div style="margin:15px 0;">
+                <label style="color:#26de81; display:block; margin-bottom:6px;">Outputs</label>
+                <div id="editOutputsList" class="io-list"></div>
+                <div class="io-row" style="margin-top:10px;">
+                    <select id="editOutputResource"></select>
+                    <input type="number" id="editOutputAmount" min="0" value="1" style="width:80px;">
+                    <button onclick="addEditOutput()" style="width:50px;">+</button>
+                </div>
+            </div>
+
+            <input type="number" id="editTime" placeholder="Production time (seconds)" min="0.1" step="0.1" style="margin:15px 0;">
+
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button onclick="saveEdit()" style="flex:1;">Save Changes</button>
+                <button class="secondary" onclick="closeEditModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ────────────────────────────────────────────────
+        // Data
+        // ────────────────────────────────────────────────
+        let resources = [];           // [{name, color, capacity: number|null}]
+        let buildings = [];           // [{id, name, inputs:[], outputs:[], productionTime}]
+        let nodes = [];               // [{id, element, building}]
+        let connections = [];
+        let selectedNode = null;
+        let draggedNode = null;
+        let dragOffset = {x:0, y:0};
+        let isSimulating = false;
+        let simInterval = null;
+
+        let tempInputs = [], tempOutputs = [];
+        let resourceCounts = {};      // current stock { "Wood": 0, ... }
+
+        let editingBuildingId = null;
+        let editTempInputs = [], editTempOutputs = [];
+
+        // ────────────────────────────────────────────────
+        // Init
+        // ────────────────────────────────────────────────
+        function init() {
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            updateResourceSelects();
+        }
+
+        // ────────────────────────────────────────────────
+        // Resources
+        // ────────────────────────────────────────────────
+        function addResource() {
+            const name = document.getElementById('resourceName').value.trim();
+            const color = document.getElementById('resourceColor').value;
+            if (!name) return alert('Enter resource name');
+            if (resources.some(r => r.name.toLowerCase() === name.toLowerCase())) return alert('Already exists');
+
+            resources.push({ name, color, capacity: null });
+            document.getElementById('resourceName').value = '';
+            updateResourceList();
+            updateCapacityList();
+            initializeResourceCounts();
+            analyzeChain();
+            updateResourceSelects();
+        }
+
+        function removeResource(name) {
+            resources = resources.filter(r => r.name !== name);
+            delete resourceCounts[name];
+            initializeResourceCounts();
+            analyzeChain();
+            updateResourceList();
+            updateCapacityList();
+            updateResourceSelects();
+            updateConnections();
+            analyzeChain();
+        }
+
+        function updateResourceList() {
+            document.getElementById('resourceList').innerHTML = resources.map(r => `
+                <span class="resource-tag">
+                    <span class="color-dot" style="background:${r.color}"></span>
+                    ${r.name}
+                    <span class="delete" onclick="removeResource('${r.name}')">×</span>
+                </span>
+            `).join('');
+        }
+
+        function updateCapacityList() {
+            document.getElementById('capacityList').innerHTML = resources.map(r => `
+                <div class="capacity-row">
+                    <span>
+                        <span class="color-dot" style="background:${r.color}"></span>
+                        ${r.name}
+                    </span>
+                    <input type="number" min="0" placeholder="∞" value="${r.capacity ?? ''}"
+                           onchange="setCapacity('${r.name}', this.value)"
+                           style="width:110px; background:#0f3460; color:white; padding:6px; text-align:right;">
+                </div>
+            `).join('');
+        }
+
+        function setCapacity(name, val) {
+            const res = resources.find(r => r.name === name);
+            if (!res) return;
+            res.capacity = (val.trim() === '' || isNaN(+val)) ? null : Math.max(0, +val);
+            updateCapacityList();
+            analyzeChain();
+        }
+
+        function updateResourceSelects() {
+            const html = resources.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+            ['inputResource','outputResource','editInputResource','editOutputResource'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = html || '<option disabled>No resources yet</option>';
+            });
+        }
+
+        // ────────────────────────────────────────────────
+        // Building Creation (new)
+        // ────────────────────────────────────────────────
+        function addBuildingInput() {
+            const res = document.getElementById('inputResource').value;
+            const amt = parseFloat(document.getElementById('inputAmount').value) || 1;
+            if (!res) return;
+            tempInputs.push({resource:res, amount:amt});
+            renderBuildingIO();
+        }
+
+        function addBuildingOutput() {
+            const res = document.getElementById('outputResource').value;
+            const amt = parseFloat(document.getElementById('outputAmount').value) || 1;
+            if (!res) return;
+            tempOutputs.push({resource:res, amount:amt});
+            renderBuildingIO();
+        }
+
+        function renderBuildingIO() {
+            const ins = document.getElementById('buildingInputs');
+            const outs = document.getElementById('buildingOutputs');
+            ins.innerHTML = tempInputs.map((io,i)=>`
+                <div class="io-item">
+                    <span>${io.amount} × ${io.resource}</span>
+                    <span style="cursor:pointer;color:#e94560;" onclick="tempInputs.splice(${i},1);renderBuildingIO()">×</span>
+                </div>
+            `).join('');
+            outs.innerHTML = tempOutputs.map((io,i)=>`
+                <div class="io-item">
+                    <span>${io.amount} × ${io.resource}</span>
+                    <span style="cursor:pointer;color:#e94560;" onclick="tempOutputs.splice(${i},1);renderBuildingIO()">×</span>
+                </div>
+            `).join('');
+        }
+
+        function addBuilding() {
+            const name = document.getElementById('buildingName').value.trim();
+            const time = parseFloat(document.getElementById('buildingTime').value) || 1;
+            if (!name) return alert('Enter building name');
+
+            const building = {
+                id: Date.now(),
+                name,
+                inputs: [...tempInputs],
+                outputs: [...tempOutputs],
+                productionTime: Math.max(0.1, time)
+            };
+
+            buildings.push(building);
+            createNode(building);
+
+            document.getElementById('buildingName').value = '';
+            tempInputs = []; tempOutputs = [];
+            renderBuildingIO();
+            analyzeChain();
+        }
+
+        // ────────────────────────────────────────────────
+        // Node UI
+        // ────────────────────────────────────────────────
+        function createNode(building, x = null, y = null) {
+            const flowchart = document.getElementById('flowchart');
+            const node = document.createElement('div');
+            node.className = 'node';
+            node.id = `node-${building.id}`;
+            node.style.left = (x ?? 100 + nodes.length * 40 % 800) + 'px';
+            node.style.top  = (y ?? 100 + Math.floor(nodes.length / 10) * 180) + 'px';
+
+            const renderIO = arr => arr.map(io => {
+                const r = resources.find(r=>r.name===io.resource);
+                return `<div class="resource-flow">
+                    <span class="color-dot" style="background:${r?.color||'#888'}"></span>
+                    ${io.amount} × ${io.resource}
+                </div>`;
+            }).join('') || '<div style="color:#666;">None</div>';
+
+            node.innerHTML = `
+                <div class="node-header">
+                    <span class="node-title">${building.name}</span>
+                    <span class="node-delete" onclick="deleteNode(${building.id})">×</span>
+                </div>
+                <div class="node-content">
+                    <div class="node-inputs">
+                        <h4>⬇ Inputs (per cycle)</h4>
+                        ${renderIO(building.inputs)}
+                    </div>
+                    <div class="node-outputs">
+                        <h4>⬆ Outputs (per cycle)</h4>
+                        ${renderIO(building.outputs)}
+                    </div>
+                    <div style="color:#888; font-size:0.75rem; margin-top:10px;">
+                        Cycle: ${building.productionTime}s
+                    </div>
+                </div>
+                ${building.inputs.length  ? '<div class="connection-point input"  style="top:50%;"></div>' : ''}
+                ${building.outputs.length ? '<div class="connection-point output" style="top:50%;"></div>' : ''}
+            `;
+
+            // Drag
+            node.addEventListener('mousedown', e => {
+                if (e.target.classList.contains('node-delete') || e.target.classList.contains('connection-point')) return;
+                draggedNode = node;
+                const rect = node.getBoundingClientRect();
+                dragOffset = {
+                    x: e.clientX - rect.left + document.querySelector('.canvas-container').scrollLeft,
+                    y: e.clientY - rect.top  + document.querySelector('.canvas-container').scrollTop
+                };
+                document.querySelectorAll('.node').forEach(n=>n.classList.remove('selected'));
+                node.classList.add('selected');
+            });
+
+            // Edit on double-click
+            node.addEventListener('dblclick', () => openEditModal(building.id));
+
+            flowchart.appendChild(node);
+            nodes.push({id:building.id, element:node, building});
+            updateConnections();
+        }
+
+        function deleteNode(id) {
+            const idx = nodes.findIndex(n=>n.id===id);
+            if (idx===-1) return;
+            nodes[idx].element.remove();
+            nodes.splice(idx,1);
+            buildings = buildings.filter(b=>b.id!==id);
+            updateConnections();
+            analyzeChain();
+        }
+
+        function onMouseMove(e) {
+            if (!draggedNode) return;
+            const c = document.querySelector('.canvas-container');
+            const r = c.getBoundingClientRect();
+            let x = e.clientX - r.left + c.scrollLeft - dragOffset.x;
+            let y = e.clientY - r.top  + c.scrollTop  - dragOffset.y;
+            draggedNode.style.left = Math.max(0,x)+'px';
+            draggedNode.style.top  = Math.max(0,y)+'px';
+            updateConnections();
+        }
+
+        function onMouseUp() {
+            draggedNode = null;
+        }
+
+        // ────────────────────────────────────────────────
+        // Connections
+        // ────────────────────────────────────────────────
+        function updateConnections() {
+            const svg = document.getElementById('connectionsSvg');
+            svg.innerHTML = '';
+
+            nodes.forEach(target => {
+                target.building.inputs.forEach(inp => {
+                    nodes.forEach(source => {
+                        if (source.id === target.id) return;
+                        if (source.building.outputs.some(o => o.resource === inp.resource)) {
+                            drawConnection(source.element, target.element, inp.resource);
+                        }
+                    });
+                });
+            });
+        }
+
+        function drawConnection(sourceEl, targetEl, resName) {
+            const svg = document.getElementById('connectionsSvg');
+            const res = resources.find(r=>r.name===resName);
+            const s = sourceEl.getBoundingClientRect();
+            const t = targetEl.getBoundingClientRect();
+            const c = document.getElementById('flowchart').getBoundingClientRect();
+
+            const x1 = s.right  - c.left;
+            const y1 = s.top + s.height/2 - c.top;
+            const x2 = t.left   - c.left;
+            const y2 = t.top + t.height/2 - c.top;
+            const mx = (x1 + x2)/2;
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+            path.setAttribute("d", `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`);
+            path.setAttribute("stroke", res?.color || '#888');
+            path.setAttribute("stroke-width", "3");
+            path.setAttribute("fill", "none");
+            path.setAttribute("opacity", "0.7");
+            svg.appendChild(path);
+
+            const arrow = document.createElementNS("http://www.w3.org/2000/svg","polygon");
+            const as = 8;
+            arrow.setAttribute("points", `${x2},${y2} ${x2-as},${y2-as/2} ${x2-as},${y2+as/2}`);
+            arrow.setAttribute("fill", res?.color || '#888');
+            svg.appendChild(arrow);
+        }
+        function initializeResourceCounts() {
+            resourceCounts = {};
+            resources.forEach(r => {
+                // Start full if capped, otherwise start at 0
+                resourceCounts[r.name] = (r.capacity !== null) ? r.capacity : 0;
+            });
+        }
+        // ────────────────────────────────────────────────
+        // Analysis & Simulation
+        // ────────────────────────────────────────────────
+        function analyzeChain() {
+            const stats = {};
+
+            buildings.forEach(b => {
+                const cps = 1 / b.productionTime;
+                b.inputs.forEach(io => {
+                    stats[io.resource] = stats[io.resource] || {prod:0, cons:0};
+                    stats[io.resource].cons += io.amount * cps;
+                });
+                b.outputs.forEach(io => {
+                    stats[io.resource] = stats[io.resource] || {prod:0, cons:0};
+                    stats[io.resource].prod += io.amount * cps;
+                });
+            });
+
+            const cont = document.getElementById('statsContent');
+            if (Object.keys(stats).length === 0) {
+                cont.innerHTML = '<p style="color:#888;">Add buildings to see analysis</p>';
+                return;
+            }
+
+            let html = '';
+            Object.entries(stats).forEach(([name, {prod, cons}]) => {
+                const bal = prod - cons;
+                const cls = bal > 0 ? 'stat-positive' : bal < 0 ? 'stat-negative' : 'stat-neutral';
+                const sign = bal > 0 ? '+' : '';
+                const cur = resourceCounts[name] ?? 0;
+                const res = resources.find(r=>r.name===name);
+                const capStr = res?.capacity != null ? ` / ${res.capacity}` : '';
+
+                html += `
+                    <div class="stat-row">
+                        <span>
+                            <span class="color-dot" style="background:${res?.color||'#888'}"></span>
+                            ${name}
+                        </span>
+                        <span class="${cls}">${sign}${bal.toFixed(2)}/s</span>
+                    </div>
+                    <div class="stat-row" style="font-size:0.85rem;color:#aaa;">
+                        <span>Stock</span>
+                        <span>${cur.toFixed(1)}${capStr}</span>
+                    </div>`;
+            });
+            cont.innerHTML = html;
+        }
+
+        function runProductionCycle() {
+            const delta = {};
+
+            buildings.forEach(b => {
+                const cps = 1 / b.productionTime;
+                b.inputs.forEach(io => {
+                    delta[io.resource] = (delta[io.resource] || 0) - io.amount * cps;
+                });
+                b.outputs.forEach(io => {
+                    delta[io.resource] = (delta[io.resource] || 0) + io.amount * cps;
+                });
+            });
+
+            Object.entries(delta).forEach(([name, change]) => {
+                let val = (resourceCounts[name] || 0) + change;
+                const res = resources.find(r => r.name === name);
+                if (res?.capacity != null) {
+                    val = Math.max(0, Math.min(res.capacity, val));
+                } else {
+                    val = Math.max(0, val); // optional: prevent negative stock
+                }
+                resourceCounts[name] = val;
+            });
+
+            analyzeChain();
+        }
+
+        function toggleSimulation() {
+            isSimulating = !isSimulating;
+            document.getElementById('simButton').textContent = isSimulating ? '⏹ Stop' : '▶️ Start Simulation';
+
+            if (isSimulating) {
+                initializeResourceCounts();   // ← reset to initial stock when sim starts
+                simInterval = setInterval(runProductionCycle, 1000);
+            } else {
+                clearInterval(simInterval);
+            }
+            
+            analyzeChain();  // refresh display
+        }
+
+        // ────────────────────────────────────────────────
+        // Edit Modal
+        // ────────────────────────────────────────────────
+        function openEditModal(id) {
+            const b = buildings.find(b=>b.id===id);
+            if (!b) return;
+
+            editingBuildingId = id;
+            editTempInputs = [...b.inputs];
+            editTempOutputs = [...b.outputs];
+
+            document.getElementById('editName').value = b.name;
+            document.getElementById('editTime').value = b.productionTime;
+
+            renderEditIO();
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+            editingBuildingId = null;
+            editTempInputs = [];
+            editTempOutputs = [];
+        }
+
+        function renderEditIO() {
+            document.getElementById('editInputsList').innerHTML = editTempInputs.map((io,i)=>`
+                <div class="io-item">
+                    <span>${io.amount} × ${io.resource}</span>
+                    <span style="cursor:pointer;color:#e94560;" onclick="editTempInputs.splice(${i},1);renderEditIO()">×</span>
+                </div>
+            `).join('');
+
+            document.getElementById('editOutputsList').innerHTML = editTempOutputs.map((io,i)=>`
+                <div class="io-item">
+                    <span>${io.amount} × ${io.resource}</span>
+                    <span style="cursor:pointer;color:#e94560;" onclick="editTempOutputs.splice(${i},1);renderEditIO()">×</span>
+                </div>
+            `).join('');
+        }
+
+        function addEditInput() {
+            const res = document.getElementById('editInputResource').value;
+            const amt = parseFloat(document.getElementById('editInputAmount').value) || 1;
+            if (!res) return;
+            editTempInputs.push({resource:res, amount:amt});
+            renderEditIO();
+        }
+
+        function addEditOutput() {
+            const res = document.getElementById('editOutputResource').value;
+            const amt = parseFloat(document.getElementById('editOutputAmount').value) || 1;
+            if (!res) return;
+            editTempOutputs.push({resource:res, amount:amt});
+            renderEditIO();
+        }
+
+        function saveEdit() {
+            const b = buildings.find(b=>b.id===editingBuildingId);
+            if (!b) return;
+
+            b.name = document.getElementById('editName').value.trim() || b.name;
+            b.productionTime = Math.max(0.1, parseFloat(document.getElementById('editTime').value) || b.productionTime);
+            b.inputs = [...editTempInputs];
+            b.outputs = [...editTempOutputs];
+
+            const nodeObj = nodes.find(n=>n.id===editingBuildingId);
+            if (nodeObj) {
+                const x = parseFloat(nodeObj.element.style.left);
+                const y = parseFloat(nodeObj.element.style.top);
+                nodeObj.element.remove();
+                nodes = nodes.filter(n=>n.id!==editingBuildingId);
+                createNode(b, x, y);
+            }
+
+            closeEditModal();
+            updateConnections();
+            analyzeChain();
+        }
+
+        // ────────────────────────────────────────────────
+        // Layout / Templates / IO
+        // ────────────────────────────────────────────────
+        function autoLayout() {
+            const spacing = {x:260, y:220};
+            nodes.forEach((n,i) => {
+                const col = i % 5;
+                const row = Math.floor(i / 5);
+                n.element.style.left = (80 + col * spacing.x) + 'px';
+                n.element.style.top  = (80 + row * spacing.y) + 'px';
+            });
+            updateConnections();
+        }
+
+        function loadTemplate() {
+            clearAll();
+
+            resources = [
+                {name:'Wood',     color:'#8B4513', capacity:20000},
+                {name:'Lumber',   color:'#DEB887', capacity:10000},
+                {name:'Iron Ore', color:'#A0522D', capacity:15000},
+                {name:'Coal',     color:'#2F2F2F', capacity:8000},
+                {name:'Iron',     color:'#4682B4', capacity:8000},
+                {name:'Steel',    color:'#71797E', capacity:5000},
+                {name:'Energy',   color:'#FFD700', capacity:null}
+            ];
+
+            updateResourceList();
+            updateCapacityList();
+            updateResourceSelects();
+
+            const samples = [
+                {name:'Woodcutter',   inputs:[], outputs:[{resource:'Wood',amount:2}], productionTime:1},
+                {name:'Coal Mine',    inputs:[], outputs:[{resource:'Coal',amount:1}], productionTime:1.5},
+                {name:'Iron Mine',    inputs:[], outputs:[{resource:'Iron Ore',amount:1}], productionTime:2},
+                {name:'Power Plant',  inputs:[{resource:'Coal',amount:1}], outputs:[{resource:'Energy',amount:5}], productionTime:1},
+                {name:'Lumber Mill',  inputs:[{resource:'Wood',amount:2},{resource:'Energy',amount:1}], outputs:[{resource:'Lumber',amount:3}], productionTime:1},
+                {name:'Smelter',      inputs:[{resource:'Iron Ore',amount:2},{resource:'Coal',amount:1}], outputs:[{resource:'Iron',amount:1}], productionTime:2},
+                {name:'Steel Mill',   inputs:[{resource:'Iron',amount:2},{resource:'Coal',amount:1},{resource:'Energy',amount:2}], outputs:[{resource:'Steel',amount:1}], productionTime:3}
+            ];
+
+            samples.forEach((b,i) => {
+                b.id = Date.now() + i;
+                buildings.push(b);
+                createNode(b, 80 + (i%4)*260, 80 + Math.floor(i/4)*220);
+            });
+            initializeResourceCounts();
+            analyzeChain();
+        }
+
+        function clearAll() {
+            resources = [];
+            buildings = [];
+            nodes.forEach(n=>n.element.remove());
+            nodes = [];
+            tempInputs = []; tempOutputs = [];
+            resourceCounts = {};
+            updateResourceList();
+            updateCapacityList();
+            updateResourceSelects();
+            renderBuildingIO();
+            document.getElementById('statsContent').innerHTML = '<p style="color:#888;">Add buildings to begin simulation</p>';
+            updateConnections();
+            initializeResourceCounts();
+        }
+
+        // ────────────────────────────────────────────────
+        // Export / Import (very basic)
+        // ────────────────────────────────────────────────
+        function exportConfig() {
+            const config = {
+                resources,
+                buildings: buildings.map(b => ({
+                    ...b,
+                    position: {
+                        x: parseFloat(document.getElementById(`node-${b.id}`)?.style.left || 100),
+                        y: parseFloat(document.getElementById(`node-${b.id}`)?.style.top  || 100)
+                    }
+                })),
+                resourceCounts
+            };
+            const blob = new Blob([JSON.stringify(config, null, 2)], {type:'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'production-chain.json'; a.click();
+        }
+
+        function importConfig() {
+            const inp = document.createElement('input');
+            inp.type = 'file'; inp.accept = '.json';
+            inp.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    try {
+                        const data = JSON.parse(ev.target.result);
+                        clearAll();
+                        resources = data.resources || [];
+                        initializeResourceCounts();           // set defaults first
+                        if (data.resourceCounts) {
+                            Object.assign(resourceCounts, data.resourceCounts);
+                        }
+                        resourceCounts = data.resourceCounts || {};
+                        updateResourceList();
+                        updateCapacityList();
+                        updateResourceSelects();
+
+                        (data.buildings || []).forEach(b => {
+                            buildings.push(b);
+                            createNode(b, b.position?.x, b.position?.y);
+                        });
+                        analyzeChain();
+                    } catch(err) {
+                        alert('Invalid file');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            inp.click();
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

@@ -475,6 +475,7 @@ func _create_tech_window():
 	
 	var branch_options = [
 		{"id": "all", "name": "All"},
+		{"id": "general", "name": "General"},
 		{"id": "building", "name": "Building"},
 		{"id": "tech", "name": "Technology"},
 		{"id": "ship", "name": "Ship"}
@@ -940,7 +941,7 @@ func _on_demolish_requested(grid_pos: Vector2i):
 	# Remove building visually
 	if building_manager:
 		building_manager.demolish_building(grid_pos)
-		if building_id in ["building_research", "ship_research", "tech_research"]:
+		if building_id in ["general_research", "building_research", "ship_research", "tech_research"]:
 			_update_tech_button_state()
 			_refresh_research_ui()
 	
@@ -970,7 +971,7 @@ func _on_info_requested(grid_pos: Vector2i):
 func _on_building_placed(building_id: String, grid_pos: Vector2i):
 	"""Handle building placement - hide tooltip"""
 	hide_placement_tooltip()
-	if building_id in ["building_research", "ship_research", "tech_research"]:
+	if building_id in ["general_research", "building_research", "ship_research", "tech_research"]:
 		_update_tech_button_state()
 		_refresh_research_ui()
 

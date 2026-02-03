@@ -734,6 +734,29 @@ func _initialize_research():
 	"""Define research tech tree entries"""
 	research = [
 		{
+			"id": "miner_extraction_boost0",
+			"name": "General Drill Heads",
+			"description": "Foundational tooling upgrades for miners.",
+			"tier": 0,
+			"branch": "general",
+			"time": 30.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 25,
+				"energy": 10
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.01
+				}
+			]
+		},
+		{
 			"id": "miner_extraction_boost",
 			"name": "Improved Drill Heads",
 			"description": "Foundational tooling upgrades for miners.",
@@ -747,12 +770,12 @@ func _initialize_research():
 			},
 			"cost_scale": 0.25,
 			"max_level": 1,
-			"prerequisites": [],
+			"prerequisites": ["miner_extraction_boost0"],
 			"effects": [
 				{
 					"type": "extraction_rate_multiplier",
 					"building_id": "miner",
-					"multiplier": 1.1
+					"multiplier": 1.2
 				}
 			]
 		},
@@ -799,7 +822,7 @@ func _initialize_research():
 				{
 					"type": "extraction_rate_multiplier",
 					"building_id": "miner",
-					"multiplier": 1.05
+					"multiplier": 1.15
 				}
 			]
 		},
@@ -824,7 +847,7 @@ func _initialize_research():
 				{
 					"type": "extraction_rate_multiplier",
 					"building_id": "miner",
-					"multiplier": 1.05
+					"multiplier": 1.15
 				}
 			]
 		},
