@@ -15,6 +15,7 @@ var miner_warning: MisplacedMinerWarning
 var building_control: BuildingControl
 var research_ui_nodes: Dictionary = {}  # {research_id: {button, status, progress}}
 var top_bar_resources: Array[String] = []
+var selected_research_branch: String = "all"
 
 func _ready():
 	_build_ui()
@@ -347,6 +348,7 @@ func _toggle_window(window_name: String):
 	if window_name in windows and is_instance_valid(windows[window_name]):
 		if window_name == "tech":
 			research_ui_nodes.clear()
+			selected_research_branch = "all"
 		windows[window_name].queue_free()
 		windows.erase(window_name)
 	else:
@@ -437,6 +439,9 @@ func _create_resources_window():
 
 func _create_tech_window():
 	"""Create tech tree window"""
+	if "tech" in windows and is_instance_valid(windows["tech"]):
+		windows["tech"].queue_free()
+		windows.erase("tech")
 	var window_data = _create_draggable_window("Technology", Vector2(900, 520), Vector2(200, 120), "tech")
 	windows["tech"] = window_data["window"]
 	
@@ -456,11 +461,32 @@ func _create_tech_window():
 	summary_margin.add_child(summary_row)
 	
 	for branch in GameData.research_branches:
+		if branch.id == "general":
+			continue
 		var tier = GameState.get_research_tier_unlocked(branch.id)
 		var label = Label.new()
 		label.text = "%s Tier %d" % [branch.name, tier]
 		label.add_theme_font_size_override("font_size", 11)
 		summary_row.add_child(label)
+
+	var branch_tabs = HBoxContainer.new()
+	branch_tabs.add_theme_constant_override("separation", 6)
+	window_data["content"].add_child(branch_tabs)
+	
+	var branch_options = [
+		{"id": "all", "name": "All"},
+		{"id": "building", "name": "Building"},
+		{"id": "tech", "name": "Technology"},
+		{"id": "ship", "name": "Ship"}
+	]
+	
+	for option in branch_options:
+		var btn = Button.new()
+		btn.text = option.name
+		btn.toggle_mode = true
+		btn.button_pressed = (option.id == selected_research_branch)
+		btn.pressed.connect(_on_research_branch_selected.bind(option.id, btn, branch_tabs))
+		branch_tabs.add_child(btn)
 	
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -504,6 +530,8 @@ func _create_tech_window():
 		
 		var tier_items: Array = tiers[tier]
 		for item in tier_items:
+			if selected_research_branch != "all" and item.get("branch", "") != selected_research_branch:
+				continue
 			var panel = PanelContainer.new()
 			panel.custom_minimum_size.y = 70
 			tier_vbox.add_child(panel)
@@ -561,6 +589,13 @@ func _format_research_cost(cost: Dictionary) -> String:
 func _on_research_button_pressed(research_id: String):
 	if GameState.queue_research(research_id):
 		_refresh_research_ui()
+
+func _on_research_branch_selected(branch_id: String, clicked_btn: Button, tabs_container: Control):
+	selected_research_branch = branch_id
+	for btn in tabs_container.get_children():
+		if btn is Button:
+			btn.button_pressed = (btn == clicked_btn)
+	_create_tech_window()
 
 func _on_research_progress_changed(_active_id: String, _time_left: float):
 	_refresh_research_ui()

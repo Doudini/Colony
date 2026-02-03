@@ -640,6 +640,22 @@ func _initialize_buildings():
 		
 		# === RESEARCH BUILDINGS ===
 		{
+			"id": "general_research",
+			"name": "General Research Lab",
+			"description": "Unlocks the basic tech tree and tier 0 research.",
+			"size": Vector2i(3, 3),
+			"build_cost": {
+				"minerals": 40,
+				"metal": 20
+			},
+			"upkeep": {
+			},
+			"production": {},
+			"color": Color(0.08, 0.25, 0.2, 1.0),
+			"category": "research",
+			"tier": 1
+		},
+		{
 			"id": "building_research",
 			"name": "Building Research Lab",
 			"description": "Unlocks building upgrades and advanced construction.",
@@ -1013,6 +1029,11 @@ func _initialize_research():
 func _initialize_research_branches():
 	"""Define research branches and their unlocking buildings"""
 	research_branches = [
+		{
+			"id": "general",
+			"name": "General",
+			"building_ids": ["general_research"]
+		},
 		{
 			"id": "building",
 			"name": "Building",

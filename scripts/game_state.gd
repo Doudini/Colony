@@ -152,9 +152,15 @@ func can_start_research(research_id: String) -> bool:
 	var max_level = int(item.get("max_level", 1))
 	if level >= max_level:
 		return false
-	var tier_unlocked = get_research_tier_unlocked(item.get("branch", ""))
-	if tier_unlocked == 0:
-		return false
+	var branch_id = item.get("branch", "")
+	var tier_unlocked = get_research_tier_unlocked(branch_id)
+	var general_tier = get_research_tier_unlocked("general")
+	if item.get("tier", 0) == 0:
+		if general_tier <= 0:
+			return false
+	else:
+		if tier_unlocked == 0:
+			return false
 	if item.get("tier", 0) > tier_unlocked:
 		return false
 	for prereq in item.get("prerequisites", []):
