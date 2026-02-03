@@ -184,6 +184,10 @@
         </div>
         <div style="margin-top:15px; padding-top:15px; border-top:2px solid #0f3460;">
             <button onclick="toggleSimulation()" id="simButton">▶️ Start Simulation</button>
+            <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.85rem; color:#aaa;">
+                <input type="checkbox" id="parityModeToggle" onchange="toggleParityMode()">
+                Godot parity mode (discrete cycles, /min rates)
+            </label>
         </div>
     </div>
 
@@ -236,6 +240,8 @@
         let dragOffset = {x:0, y:0};
         let isSimulating = false;
         let simInterval = null;
+        let parityMode = false;
+        let buildingCycleProgress = {}; // {buildingId: elapsedSeconds}
 
         let tempInputs = [], tempOutputs = [];
         let resourceCounts = {};      // current stock { "Wood": 0, ... }
@@ -373,6 +379,7 @@
 
             buildings.push(building);
             createNode(building);
+            buildingCycleProgress[building.id] = 0;
 
             document.getElementById('buildingName').value = '';
             tempInputs = []; tempOutputs = [];
@@ -448,6 +455,7 @@
             nodes[idx].element.remove();
             nodes.splice(idx,1);
             buildings = buildings.filter(b=>b.id!==id);
+            delete buildingCycleProgress[id];
             updateConnections();
             analyzeChain();
         }
@@ -527,7 +535,8 @@
             const stats = {};
 
             buildings.forEach(b => {
-                const cps = 1 / b.productionTime;
+                const rateScale = parityMode ? 60 : 1;
+                const cps = (1 / b.productionTime) * rateScale;
                 b.inputs.forEach(io => {
                     stats[io.resource] = stats[io.resource] || {prod:0, cons:0};
                     stats[io.resource].cons += io.amount * cps;
@@ -545,6 +554,7 @@
             }
 
             let html = '';
+            const unitLabel = parityMode ? '/min' : '/s';
             Object.entries(stats).forEach(([name, {prod, cons}]) => {
                 const bal = prod - cons;
                 const cls = bal > 0 ? 'stat-positive' : bal < 0 ? 'stat-negative' : 'stat-neutral';
@@ -559,7 +569,7 @@
                             <span class="color-dot" style="background:${res?.color||'#888'}"></span>
                             ${name}
                         </span>
-                        <span class="${cls}">${sign}${bal.toFixed(2)}/s</span>
+                        <span class="${cls}">${sign}${bal.toFixed(2)}${unitLabel}</span>
                     </div>
                     <div class="stat-row" style="font-size:0.85rem;color:#aaa;">
                         <span>Stock</span>
@@ -570,28 +580,61 @@
         }
 
         function runProductionCycle() {
-            const delta = {};
+            if (!parityMode) {
+                const delta = {};
 
-            buildings.forEach(b => {
-                const cps = 1 / b.productionTime;
-                b.inputs.forEach(io => {
-                    delta[io.resource] = (delta[io.resource] || 0) - io.amount * cps;
+                buildings.forEach(b => {
+                    const cps = 1 / b.productionTime;
+                    b.inputs.forEach(io => {
+                        delta[io.resource] = (delta[io.resource] || 0) - io.amount * cps;
+                    });
+                    b.outputs.forEach(io => {
+                        delta[io.resource] = (delta[io.resource] || 0) + io.amount * cps;
+                    });
                 });
-                b.outputs.forEach(io => {
-                    delta[io.resource] = (delta[io.resource] || 0) + io.amount * cps;
-                });
-            });
 
-            Object.entries(delta).forEach(([name, change]) => {
-                let val = (resourceCounts[name] || 0) + change;
-                const res = resources.find(r => r.name === name);
-                if (res?.capacity != null) {
-                    val = Math.max(0, Math.min(res.capacity, val));
-                } else {
-                    val = Math.max(0, val); // optional: prevent negative stock
-                }
-                resourceCounts[name] = val;
-            });
+                Object.entries(delta).forEach(([name, change]) => {
+                    let val = (resourceCounts[name] || 0) + change;
+                    const res = resources.find(r => r.name === name);
+                    if (res?.capacity != null) {
+                        val = Math.max(0, Math.min(res.capacity, val));
+                    } else {
+                        val = Math.max(0, val); // optional: prevent negative stock
+                    }
+                    resourceCounts[name] = val;
+                });
+            } else {
+                buildings.forEach(b => {
+                    const prev = buildingCycleProgress[b.id] ?? 0;
+                    const elapsed = prev + 1;
+                    const cycles = Math.floor(elapsed / b.productionTime);
+                    if (cycles <= 0) {
+                        buildingCycleProgress[b.id] = elapsed;
+                        return;
+                    }
+
+                    for (let i = 0; i < cycles; i++) {
+                        const hasInputs = b.inputs.every(io => (resourceCounts[io.resource] || 0) >= io.amount);
+                        if (hasInputs) {
+                            b.inputs.forEach(io => {
+                                resourceCounts[io.resource] = (resourceCounts[io.resource] || 0) - io.amount;
+                            });
+                            b.outputs.forEach(io => {
+                                const res = resources.find(r => r.name === io.resource);
+                                let val = (resourceCounts[io.resource] || 0) + io.amount;
+                                if (res?.capacity != null) {
+                                    val = Math.max(0, Math.min(res.capacity, val));
+                                } else {
+                                    val = Math.max(0, val);
+                                }
+                                resourceCounts[io.resource] = val;
+                            });
+                        }
+                    }
+
+                    buildingCycleProgress[b.id] = elapsed - cycles * b.productionTime;
+                });
+            }
 
             analyzeChain();
         }
@@ -602,12 +645,24 @@
 
             if (isSimulating) {
                 initializeResourceCounts();   // ← reset to initial stock when sim starts
+                buildingCycleProgress = {};
+                buildings.forEach(b => { buildingCycleProgress[b.id] = 0; });
                 simInterval = setInterval(runProductionCycle, 1000);
             } else {
                 clearInterval(simInterval);
             }
             
             analyzeChain();  // refresh display
+        }
+
+        function toggleParityMode() {
+            parityMode = document.getElementById('parityModeToggle').checked;
+            if (isSimulating) {
+                initializeResourceCounts();
+                buildingCycleProgress = {};
+                buildings.forEach(b => { buildingCycleProgress[b.id] = 0; });
+            }
+            analyzeChain();
         }
 
         // ────────────────────────────────────────────────
@@ -675,6 +730,7 @@
             b.productionTime = Math.max(0.1, parseFloat(document.getElementById('editTime').value) || b.productionTime);
             b.inputs = [...editTempInputs];
             b.outputs = [...editTempOutputs];
+            buildingCycleProgress[b.id] = 0;
 
             const nodeObj = nodes.find(n=>n.id===editingBuildingId);
             if (nodeObj) {
@@ -735,6 +791,7 @@
                 b.id = Date.now() + i;
                 buildings.push(b);
                 createNode(b, 80 + (i%4)*260, 80 + Math.floor(i/4)*220);
+                buildingCycleProgress[b.id] = 0;
             });
             initializeResourceCounts();
             analyzeChain();
@@ -747,6 +804,7 @@
             nodes = [];
             tempInputs = []; tempOutputs = [];
             resourceCounts = {};
+            buildingCycleProgress = {};
             updateResourceList();
             updateCapacityList();
             updateResourceSelects();
@@ -801,6 +859,7 @@
                         (data.buildings || []).forEach(b => {
                             buildings.push(b);
                             createNode(b, b.position?.x, b.position?.y);
+                            buildingCycleProgress[b.id] = 0;
                         });
                         analyzeChain();
                     } catch(err) {
