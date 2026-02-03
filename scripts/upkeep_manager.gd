@@ -68,6 +68,10 @@ func _process_upkeep():
 		
 		for resource_id in upkeep:
 			var amount_per_min = upkeep[resource_id]
+			var modifier = 1.0
+			if building_id in GameState.upkeep_modifiers:
+				modifier = GameState.upkeep_modifiers[building_id].get(resource_id, 1.0)
+			amount_per_min *= modifier
 			var amount_per_tick = (amount_per_min / 60.0) * tick_interval  # Per 10 seconds
 			
 			if resource_id not in total_upkeep:
@@ -124,6 +128,10 @@ func get_total_upkeep() -> Dictionary:
 		for resource_id in upkeep:
 			if resource_id not in total:
 				total[resource_id] = 0.0
-			total[resource_id] += upkeep[resource_id]
+			var amount_per_min = upkeep[resource_id]
+			var modifier = 1.0
+			if building_id in GameState.upkeep_modifiers:
+				modifier = GameState.upkeep_modifiers[building_id].get(resource_id, 1.0)
+			total[resource_id] += amount_per_min * modifier
 	
 	return total

@@ -6,7 +6,7 @@ var building_manager: BuildingManager
 var upkeep_manager: UpkeepManager
 
 # Tracking dictionaries
-var extractors: Dictionary = {}  # {grid_pos: {resource_id, rate}}
+var extractors: Dictionary = {}  # {grid_pos: {building_id, resource_id, rate}}
 var producers: Dictionary = {}   # {grid_pos: {inputs, outputs, time}}
 
 # Calculated rates (per minute)
@@ -19,9 +19,10 @@ func _ready():
 		production_rates[resource.id] = 0.0
 		consumption_rates[resource.id] = 0.0
 
-func register_extractor(grid_pos: Vector2i, resource_id: String, rate: float):
+func register_extractor(grid_pos: Vector2i, building_id: String, resource_id: String, rate: float):
 	"""Register an extractor building"""
 	extractors[grid_pos] = {
+		"building_id": building_id,
 		"resource": resource_id,
 		"rate": rate
 	}
@@ -61,8 +62,10 @@ func _recalculate_rates():
 	for extractor in extractors.values():
 		var res_id = extractor.resource
 		var rate = extractor.rate
+		var building_id = extractor.get("building_id", "")
+		var multiplier = GameState.extraction_rate_modifiers.get(building_id, 1.0)
 		if res_id in production_rates:
-			production_rates[res_id] += rate
+			production_rates[res_id] += rate * multiplier
 		else:
 			print("⚠️ Unknown resource in extractor: %s" % res_id)
 	

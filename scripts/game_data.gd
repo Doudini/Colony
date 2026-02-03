@@ -7,9 +7,15 @@ var resources: Array[Dictionary] = []
 # Building types
 var buildings: Array[Dictionary] = []
 
+# Research tech definitions
+var research: Array[Dictionary] = []
+var research_branches: Array[Dictionary] = []
+
 func _ready():
 	_initialize_resources()
 	_initialize_buildings()
+	_initialize_research_branches()
+	_initialize_research()
 
 func _initialize_resources():
 	"""Define tiered resource system"""
@@ -292,7 +298,7 @@ func _initialize_buildings():
 				"time": 10.0
 			},
 			"color": Color(0.2, 0.3, 0.5),
-			"category": "energy",
+			"category": "production",
 			"tier": 0
 		},
 		{
@@ -310,7 +316,7 @@ func _initialize_buildings():
 			},
 			"population_capacity": 5,
 			"color": Color(0.6, 0.6, 0.6),
-			"category": "habitation",
+			"category": "life_support",
 			"tier": 0
 		},
 		{
@@ -634,6 +640,22 @@ func _initialize_buildings():
 		
 		# === RESEARCH BUILDINGS ===
 		{
+			"id": "general_research",
+			"name": "General Research Lab",
+			"description": "Unlocks the basic tech tree and tier 0 research.",
+			"size": Vector2i(3, 3),
+			"build_cost": {
+				"minerals": 40,
+				"metal": 20
+			},
+			"upkeep": {
+			},
+			"production": {},
+			"color": Color(0.08, 0.25, 0.2, 1.0),
+			"category": "research",
+			"tier": 1
+		},
+		{
 			"id": "building_research",
 			"name": "Building Research Lab",
 			"description": "Unlocks building upgrades and advanced construction.",
@@ -647,6 +669,24 @@ func _initialize_buildings():
 			},
 			"production": {},
 			"color": Color(0.07, 0.255, 0.242, 1.0),
+			"category": "research",
+			"tier": 2
+		},
+		{
+			"id": "tech_research",
+			"name": "Technology Research Lab",
+			"description": "General-purpose research hub for applied sciences.",
+			"size": Vector2i(3, 3),
+			"build_cost": {
+				"minerals": 60,
+				"metal": 25,
+				"components": 12
+			},
+			"upkeep": {
+				"energy": 1
+			},
+			"production": {},
+			"color": Color(0.1, 0.3, 0.35, 1.0),
 			"category": "research",
 			"tier": 2
 		},
@@ -687,6 +727,327 @@ func _initialize_buildings():
 			"category": "infrastructure",
 			"special": "enables_space_travel",
 			"tier": 4
+		}
+	]
+
+func _initialize_research():
+	"""Define research tech tree entries"""
+	research = [
+		{
+			"id": "miner_extraction_boost",
+			"name": "Improved Drill Heads",
+			"description": "Foundational tooling upgrades for miners.",
+			"tier": 0,
+			"branch": "building",
+			"time": 30.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 25,
+				"energy": 10
+			},
+			"cost_scale": 0.25,
+			"max_level": 1,
+			"prerequisites": [],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.1
+				}
+			]
+		},
+		{
+			"id": "miner_biomatter_efficiency",
+			"name": "Biomatter Recyclers",
+			"description": "Reduce miner biomatter usage with recycling systems.",
+			"tier": 0,
+			"branch": "building",
+			"time": 40.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 20,
+				"biomatter": 10
+			},
+			"cost_scale": 0.25,
+			"max_level": 1,
+			"prerequisites": ["miner_extraction_boost"],
+			"effects": [
+				{
+					"type": "upkeep_multiplier",
+					"building_id": "miner",
+					"resource_id": "biomatter",
+					"multiplier": 0.9
+				}
+			]
+		},
+		{
+			"id": "drill_optimization",
+			"name": "Drill Optimization",
+			"description": "Tuning passes for driller throughput (stackable).",
+			"tier": 1,
+			"branch": "building",
+			"time": 45.0,
+			"time_scale": 0.25,
+			"cost": {
+				"minerals": 40,
+				"energy": 20
+			},
+			"cost_scale": 0.3,
+			"max_level": 4,
+			"prerequisites": ["miner_extraction_boost"],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.05
+				}
+			]
+		},
+		{
+			"id": "drill_output_focus",
+			"name": "Drill Output Focus",
+			"description": "Sharper extraction profile for concentrated yields.",
+			"tier": 1,
+			"branch": "building",
+			"time": 50.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 35,
+				"energy": 25
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "drill_optimization", "level": 2}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.05
+				}
+			]
+		},
+		{
+			"id": "forestry_efficiency",
+			"name": "Forestry Efficiency",
+			"description": "Improved cutting patterns for foresters.",
+			"tier": 1,
+			"branch": "building",
+			"time": 40.0,
+			"time_scale": 0.2,
+			"cost": {
+				"wood": 20,
+				"energy": 15
+			},
+			"cost_scale": 0.25,
+			"max_level": 3,
+			"prerequisites": [],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "forester",
+					"multiplier": 1.04
+				}
+			]
+		},
+		{
+			"id": "forestry_yield_focus",
+			"name": "Forestry Yield Focus",
+			"description": "Focused harvest routes for higher yield.",
+			"tier": 1,
+			"branch": "building",
+			"time": 45.0,
+			"time_scale": 0.2,
+			"cost": {
+				"wood": 30,
+				"energy": 20
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "forestry_efficiency", "level": 2}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "forester",
+					"multiplier": 1.05
+				}
+			]
+		},
+		{
+			"id": "biomatter_reclaimers",
+			"name": "Biomatter Reclaimers",
+			"description": "Recover biomatter loss across extractor crews.",
+			"tier": 1,
+			"branch": "building",
+			"time": 55.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 30,
+				"biomatter": 15
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": ["miner_biomatter_efficiency"],
+			"effects": [
+				{
+					"type": "upkeep_multiplier",
+					"building_id": "miner",
+					"resource_id": "biomatter",
+					"multiplier": 0.95
+				}
+			]
+		},
+		{
+			"id": "sustainability_routines",
+			"name": "Sustainability Routines",
+			"description": "Operational routines reduce biomatter waste.",
+			"tier": 1,
+			"branch": "building",
+			"time": 50.0,
+			"time_scale": 0.2,
+			"cost": {
+				"minerals": 25,
+				"biomatter": 20
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "biomatter_reclaimers", "level": 1}
+			],
+			"effects": [
+				{
+					"type": "upkeep_multiplier",
+					"building_id": "miner",
+					"resource_id": "biomatter",
+					"multiplier": 0.97
+				}
+			]
+		},
+		{
+			"id": "deep_core_drilling",
+			"name": "Deep-Core Drilling",
+			"description": "Advanced rigs unlock higher throughput.",
+			"tier": 2,
+			"branch": "building",
+			"time": 70.0,
+			"time_scale": 0.25,
+			"cost": {
+				"metal": 40,
+				"energy": 30
+			},
+			"cost_scale": 0.3,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "drill_optimization", "level": 4}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.08
+				}
+			]
+		},
+		{
+			"id": "advanced_surveying",
+			"name": "Advanced Surveying",
+			"description": "Precision survey arrays boost mining throughput.",
+			"tier": 2,
+			"branch": "building",
+			"time": 55.0,
+			"time_scale": 0.2,
+			"cost": {
+				"metal": 25,
+				"energy": 20
+			},
+			"cost_scale": 0.25,
+			"max_level": 2,
+			"prerequisites": [],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.04
+				}
+			]
+		},
+		{
+			"id": "extractor_networks",
+			"name": "Extractor Networks",
+			"description": "Coordinated logistics reduce downtime.",
+			"tier": 2,
+			"branch": "building",
+			"time": 60.0,
+			"time_scale": 0.2,
+			"cost": {
+				"components": 20,
+				"energy": 20
+			},
+			"cost_scale": 0.3,
+			"max_level": 3,
+			"prerequisites": [
+				{"id": "drill_output_focus", "level": 1}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "miner",
+					"multiplier": 1.04
+				}
+			]
+		},
+		{
+			"id": "forestry_automation",
+			"name": "Forestry Automation",
+			"description": "Automated trimming yields consistent output.",
+			"tier": 2,
+			"branch": "building",
+			"time": 60.0,
+			"time_scale": 0.25,
+			"cost": {
+				"metal": 30,
+				"energy": 25
+			},
+			"cost_scale": 0.3,
+			"max_level": 2,
+			"prerequisites": [
+				{"id": "forestry_yield_focus", "level": 2}
+			],
+			"effects": [
+				{
+					"type": "extraction_rate_multiplier",
+					"building_id": "forester",
+					"multiplier": 1.05
+				}
+			]
+		}
+	]
+
+func _initialize_research_branches():
+	"""Define research branches and their unlocking buildings"""
+	research_branches = [
+		{
+			"id": "general",
+			"name": "General",
+			"building_ids": ["general_research"]
+		},
+		{
+			"id": "building",
+			"name": "Building",
+			"building_ids": ["building_research"]
+		},
+		{
+			"id": "tech",
+			"name": "Technology",
+			"building_ids": ["tech_research"]
+		},
+		{
+			"id": "ship",
+			"name": "Ship",
+			"building_ids": ["ship_research"]
 		}
 	]
 
@@ -736,6 +1097,18 @@ func get_building_by_id(building_id: String) -> Dictionary:
 	for building in buildings:
 		if building.id == building_id:
 			return building
+	return {}
+
+func get_research_by_id(research_id: String) -> Dictionary:
+	for item in research:
+		if item.id == research_id:
+			return item
+	return {}
+
+func get_research_branch_by_id(branch_id: String) -> Dictionary:
+	for branch in research_branches:
+		if branch.id == branch_id:
+			return branch
 	return {}
 
 func can_afford_building(building_id: String, inventory: Dictionary) -> bool:
