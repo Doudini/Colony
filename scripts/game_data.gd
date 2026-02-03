@@ -448,6 +448,9 @@ func _initialize_buildings():
 				"biomatter": 1,
 				"energy": 1
 			},
+			"required_resource": ["wood", "minerals", "water", "ore", "hydrogen", "biomatter"],
+			"required_terrain": [],
+			"forbidden_terrain": ["deep_water", "marsh"],
 			"production": {},
 			"extraction_rate": 3.0,  # Per minute
 			"color": Color(0.7, 0.5, 0.3),

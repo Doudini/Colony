@@ -106,7 +106,7 @@ func _update_preview():
 		preview_building.position = world_pos
 		
 		# Check if can place
-		var can_place = tile_grid.can_place_building(grid_pos, building_data.size)
+		var can_place = tile_grid.can_place_building(grid_pos, building_data.size, current_building_id)
 		var can_afford = GameData.can_afford_building(current_building_id, GameState.resources)
 		
 		# Check placement requirements
@@ -220,6 +220,7 @@ func _is_mouse_over_ui() -> bool:
 
 func _try_place_building():
 	"""Attempt to place the current building"""
+	print("PLACE BUILDING")
 	var camera = get_viewport().get_camera_3d() as IsometricCamera
 	if not camera:
 		return
@@ -232,7 +233,7 @@ func _try_place_building():
 		return
 	
 	# Check placement validity
-	if not tile_grid.can_place_building(grid_pos, building_data.size):
+	if not tile_grid.can_place_building(grid_pos, building_data.size, current_building_id):
 		building_placement_failed.emit("Cannot place building here - tiles occupied")
 		return
 	
@@ -324,7 +325,7 @@ func _create_building(grid_pos: Vector2i, building_id: String):
 		world_pos.x += extra_offset_x * tile_grid.TILE_SIZE
 		world_pos.z += extra_offset_z * tile_grid.TILE_SIZE
 	
-	world_pos.y = 1.0
+	world_pos.y = 0.5
 	building.position = world_pos
 	
 	add_child(building)
