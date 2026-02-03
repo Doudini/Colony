@@ -120,7 +120,13 @@ func get_research_tier_unlocked(branch_id: String = "") -> int:
 
 func get_total_research_building_count() -> int:
 	"""Total research buildings placed in the world"""
-	return _get_research_building_count("")
+	var count = 0
+	for branch in GameData.research_branches:
+		var branch_id = branch.get("id", "")
+		if branch_id == "":
+			continue
+		count += _get_research_building_count(branch_id)
+	return count
 
 func _get_research_building_count(branch_id: String) -> int:
 	"""Count research buildings placed in the world"""
@@ -136,11 +142,9 @@ func _get_research_building_count(branch_id: String) -> int:
 			var tile_info = tile_grid.get_tile_info(grid_pos)
 			var building_id = tile_info.get("building", "")
 			if branch_id == "":
-				if building_id in ["building_research", "ship_research", "tech_research"]:
-					count += 1
-			else:
-				if building_id in branch_building_ids:
-					count += 1
+				continue
+			if building_id in branch_building_ids:
+				count += 1
 	return count
 
 func can_start_research(research_id: String) -> bool:
