@@ -128,63 +128,64 @@ const TERRAIN_TRANSITIONS := {
 
 # Texture atlas configuration
 # Each terrain needs a tileset in the atlas
+# NOTE: Rows 0-1 in the tilemap contain resource icons, terrain starts at row 2
 const ATLAS_CONFIG := {
 	"beach": {
-		"row": 0,
+		"row": 2,  # Shifted from 0 (rows 0-1 have resource icons)
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 3
 	},
 	"grassland": {
-		"row": 1,
+		"row": 3,  # Shifted from 1
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 5
 	},
 	"lowland": {
-		"row": 1,  # Same as grassland
+		"row": 3,  # Same as grassland
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 5
 	},
 	"forest": {
-		"row": 2,
+		"row": 4,  # Shifted from 2
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 5
 	},
 	"ground": {
-		"row": 3,
+		"row": 5,  # Shifted from 3
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 3
 	},
 	"highland": {
-		"row": 4,
+		"row": 6,  # Shifted from 4
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 3
 	},
 	"mountain": {
-		"row": 5,
+		"row": 7,  # Shifted from 5
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 3
 	},
 	"marsh": {
-		"row": 6,
+		"row": 8,  # Shifted from 6
 		"has_transitions": true,
 		"tile_count": 16,
 		"variations": 3
 	},
 	"shallow_water": {
-		"row": 7,
+		"row": 9,  # Shifted from 7
 		"has_transitions": false,
 		"tile_count": 4,
 		"variations": 2
 	},
 	"deep_water": {
-		"row": 7,
+		"row": 9,  # Same as shallow_water
 		"has_transitions": false,
 		"tile_count": 4,
 		"variations": 2
