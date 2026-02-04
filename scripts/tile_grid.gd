@@ -1,23 +1,16 @@
 extends Node3D
 class_name TileGrid
 
-# =========================
-# CONFIG
-# =========================
-
 const TILE_SIZE := 2.0
 const CHUNK_SIZE := 16
 
 @export var grid_width := 256
 @export var grid_height := 256
 
-# =========================
-# DATA
-# =========================
-
 var grid: Array = []
 var resource_deposits: Dictionary = {}
 var chunk_meshes: Dictionary = {}
+var corner_grid: Array = []
 
 # Terrain noise layers
 var height_noise: FastNoiseLite
@@ -192,7 +185,7 @@ const ATLAS_CONFIG := {
 }
 
 # Texture atlas settings
-const ATLAS_TILE_SIZE := 128  # Size of each tile in pixels
+const ATLAS_TILE_SIZE := 16  # Size of each tile in pixels
 const ATLAS_TILES_PER_ROW := 16  # 16 tiles per row (marching squares + variations)
 @export var terrain_atlas: Texture2D  # Assigned in editor
 
@@ -209,12 +202,40 @@ func _ready():
 	_add_marshes()
 	_smooth_terrain()
 	_place_major_rivers()  # New: Place long rivers first
+	_build_corner_grid()
 	_place_resource_deposits()
 	_create_visual_grid()
 
 # =========================
 # GRID SETUP
 # =========================
+func _build_corner_grid():
+	corner_grid.clear()
+	corner_grid.resize(grid_width + 1)
+
+	for x in range(grid_width + 1):
+		corner_grid[x] = []
+		for y in range(grid_height + 1):
+			corner_grid[x].append(_resolve_corner_type(x, y))
+func _resolve_corner_type(cx: int, cy: int) -> String:
+	var best_type := ""
+	var best_priority := -INF
+
+	for dx in [-1, 0]:
+		for dy in [-1, 0]:
+			var tx = cx + dx
+			var ty = cy + dy
+			if tx < 0 or ty < 0 or tx >= grid_width or ty >= grid_height:
+				continue
+
+			var t = grid[tx][ty]["type"]
+			var p = TERRAIN_PRIORITY.get(t, 0)
+
+			if p > best_priority:
+				best_priority = p
+				best_type = t
+
+	return best_type
 
 func _initialize_grid():
 	grid.clear()
@@ -898,53 +919,145 @@ func _grow_vein_cluster(start: Vector2i, target: int, allowed: Array, forbidden:
 # AUTOTILING FUNCTIONS
 # =========================
 
+#func _get_autotile_index(pos: Vector2i) -> int:
+	#"""
+	#Returns the marching squares tile index (0-15) based on neighbors.
+	#Checks 4 cardinal directions against the transition target.
+	#"""
+	#var tile_type = grid[pos.x][pos.y]["type"]
+#
+	## If this terrain doesn't transition, use solid tile (all neighbors match)
+	#if not tile_type in TERRAIN_TRANSITIONS:
+		## For water and other non-transitioning types, add variation
+		#if tile_type in ["shallow_water", "deep_water"]:
+			#return _get_water_variation(pos)
+		#return 15  # Solid tile
+#
+	#var transition_to = TERRAIN_TRANSITIONS[tile_type]
+	#var my_priority = TERRAIN_PRIORITY.get(tile_type, 0)
+#
+	## Check 4 cardinal neighbors (N, E, S, W) for marching squares
+	#var neighbors = [
+		#Vector2i(0, -1),  # North
+		#Vector2i(1, 0),   # East
+		#Vector2i(0, 1),   # South
+		#Vector2i(-1, 0)   # West
+	#]
+	## Check 4 cardinal edges, but consider diagonal corners for smoother marching squares.
+	#var edge_offsets = [
+		#[Vector2i(0, -1), Vector2i(-1, -1), Vector2i(1, -1)],  # North edge + corners
+		#[Vector2i(1, 0), Vector2i(1, -1), Vector2i(1, 1)],     # East edge + corners
+		#[Vector2i(0, 1), Vector2i(-1, 1), Vector2i(1, 1)],      # South edge + corners
+		#[Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(-1, 1)]    # West edge + corners
+	#]
+#
+	#var bitmask = 0
+	#for i in range(4):
+		##var has_transition_neighbor = false
+		##for offset in edge_offsets[i]:
+			##var check_pos = pos + offset
+			##if not is_valid_pos(check_pos):
+				##continue
+			##var neighbor_type = grid[check_pos.x][check_pos.y]["type"]
+			##var neighbor_priority = TERRAIN_PRIORITY.get(neighbor_type, 0)
+			##if neighbor_type == transition_to or neighbor_priority > my_priority:
+				##has_transition_neighbor = true
+				##break
+#
+		#var check_pos = pos + neighbors[i]
+##
+		## Edge of map counts as matching (prevents edge artifacts)
+		#if not is_valid_pos(check_pos):
+			#bitmask |= (1 << (3 - i))
+			#continue
+#
+		#var neighbor_type = grid[check_pos.x][check_pos.y]["type"]
+		#var neighbor_priority = TERRAIN_PRIORITY.get(neighbor_type, 0)
+#
+		## If neighbor is same type OR lower priority, we don't transition
+		## If neighbor is our transition target OR higher priority, we do transition
+		#if neighbor_type == tile_type or neighbor_priority < my_priority:
+#
+			#bitmask |= (1 << (3 - i))
+#
+			##bitmask |= (1 << (3 - i))
+#
+	## For fully surrounded tiles (all neighbors same), add variation
+	##if bitmask == 15:
+		##return _get_tile_variation(pos, tile_type)
+#
+	#return bitmask
+	
+#func _corner_filled(
+	#pos: Vector2i,
+	#base_type: String,
+	#base_priority: int
+#) -> bool:
+	#if not is_valid_pos(pos):
+		#return true  # treat outside as filled to avoid holes
+#
+	#var t = grid[pos.x][pos.y]["type"]
+	#var p = TERRAIN_PRIORITY.get(t, 0)
+#
+	#return t == base_type or p < base_priority
+func _corner_filled(
+	corner_pos: Vector2i,
+	base_type: String,
+	base_priority: int
+) -> bool:
+	if corner_pos.x < 0 or corner_pos.y < 0 \
+	or corner_pos.x > grid_width or corner_pos.y > grid_height:
+		return true
+
+	var t = corner_grid[corner_pos.x][corner_pos.y]
+	var p = TERRAIN_PRIORITY.get(t, 0)
+
+	# Filled if same terrain OR lower priority
+	return t == base_type or p < base_priority
+
 func _get_autotile_index(pos: Vector2i) -> int:
-	"""
-	Returns the marching squares tile index (0-15) based on neighbors.
-	Checks 4 cardinal directions against the transition target.
-	"""
-	var tile_type = grid[pos.x][pos.y]["type"]
+	var base_type = grid[pos.x][pos.y]["type"]
 
-	# If this terrain doesn't transition, use solid tile (all neighbors match)
-	if not tile_type in TERRAIN_TRANSITIONS:
-		# For water and other non-transitioning types, add variation
-		if tile_type in ["shallow_water", "deep_water"]:
+	if not base_type in TERRAIN_TRANSITIONS:
+		if base_type in ["shallow_water", "deep_water"]:
 			return _get_water_variation(pos)
-		return 15  # Solid tile
+		return 15
 
-	var transition_to = TERRAIN_TRANSITIONS[tile_type]
-	var my_priority = TERRAIN_PRIORITY.get(tile_type, 0)
+	var base_priority = TERRAIN_PRIORITY[base_type]
+	var mask := 0
 
-	# Check 4 cardinal neighbors (N, E, S, W) for marching squares
-	var neighbors = [
-		Vector2i(0, -1),  # North
-		Vector2i(1, 0),   # East
-		Vector2i(0, 1),   # South
-		Vector2i(-1, 0)   # West
-	]
+	if _corner_filled(pos + Vector2i(0, 0), base_type, base_priority):
+		mask |= 1
+	if _corner_filled(pos + Vector2i(1, 0), base_type, base_priority):
+		mask |= 2
+	if _corner_filled(pos + Vector2i(1, 1), base_type, base_priority):
+		mask |= 4
+	if _corner_filled(pos + Vector2i(0, 1), base_type, base_priority):
+		mask |= 8
 
-	var bitmask = 0
-	for i in range(4):
-		var check_pos = pos + neighbors[i]
+	# Dual-grid ambiguity fix
+	if mask == 5 or mask == 10:
+		var center_priority := 0
+		var count := 0
 
-		# Edge of map counts as matching (prevents edge artifacts)
-		if not is_valid_pos(check_pos):
-			bitmask |= (1 << (3 - i))
-			continue
+		for dx in [0, 1]:
+			for dy in [0, 1]:
+				var p = pos + Vector2i(dx, dy)
+				if is_valid_pos(p):
+					center_priority += TERRAIN_PRIORITY.get(grid[p.x][p.y]["type"], 0)
+					count += 1
 
-		var neighbor_type = grid[check_pos.x][check_pos.y]["type"]
-		var neighbor_priority = TERRAIN_PRIORITY.get(neighbor_type, 0)
+		if count > 0:
+			center_priority /= count
 
-		# If neighbor is same type OR lower priority, we don't transition
-		# If neighbor is our transition target OR higher priority, we do transition
-		if neighbor_type == tile_type or neighbor_priority < my_priority:
-			bitmask |= (1 << (3 - i))
+		if center_priority < base_priority:
+			mask = 15 - mask
 
-	# For fully surrounded tiles (all neighbors same), add variation
-	if bitmask == 15:
-		return _get_tile_variation(pos, tile_type)
+	if mask == 15:
+		return _get_tile_variation(pos, base_type)
 
-	return bitmask
+	return mask
+
 
 func _get_tile_variation(pos: Vector2i, tile_type: String) -> int:
 	"""
@@ -964,7 +1077,7 @@ func _get_tile_variation(pos: Vector2i, tile_type: String) -> int:
 	var variation = seed_value % config["variations"]
 
 	# Variation tiles start after the base 16 tiles
-	return 15 + variation
+	return 15 # + variation
 
 func _get_water_variation(pos: Vector2i) -> int:
 	"""
@@ -1013,11 +1126,21 @@ func _calculate_uv_for_tile(tile_index: int, atlas_row: int) -> Array:
 
 	# Return as [TL, TR, BR, BL]
 	return [
-		Vector2(u_left, v_top),      # Top-left
-		Vector2(u_right, v_top),     # Top-right
+		Vector2(u_left, v_bottom),    # Bottom-left
 		Vector2(u_right, v_bottom),  # Bottom-right
-		Vector2(u_left, v_bottom)    # Bottom-left
+		Vector2(u_right, v_top),     # Top-right
+		Vector2(u_left, v_top),      # Top-left
+		
+		
+		
 	]
+	#return [
+		#Vector2(u_right, v_bottom),  # Bottom-right
+		#Vector2(u_left, v_bottom),    # Bottom-left
+		#
+		#Vector2(u_left, v_top),      # Top-left
+		#Vector2(u_right, v_top),     # Top-right
+	#]
 
 # =========================
 # CHUNK MESH GENERATION
