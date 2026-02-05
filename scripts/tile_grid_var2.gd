@@ -32,8 +32,8 @@ func _create_visual_grid():
 			chunk_meshes[coord] = mesh
 			add_child(mesh)
 
-			var water_mesh := _create_water_chunk_mesh(coord)
-			add_child(water_mesh)
+	var water_mesh := _create_water_mesh()
+	add_child(water_mesh)
 
 func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 	var st := SurfaceTool.new()
@@ -80,21 +80,31 @@ func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 
 	return mi
 
-func _create_water_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
+func _create_water_mesh() -> MeshInstance3D:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var sx := chunk.x * CHUNK_SIZE
-	var sy := chunk.y * CHUNK_SIZE
-	var ex = min(sx + CHUNK_SIZE, grid_width)
-	var ey = min(sy + CHUNK_SIZE, grid_height)
+	var half_width = (grid_width * TILE_SIZE) * 0.5
+	var half_height = (grid_height * TILE_SIZE) * 0.5
 
-	for x in range(sx, ex):
-		for y in range(sy, ey):
-			var tile_pos = Vector2i(x, y)
-			var terrain_type = grid[x][y]["type"]
-			if terrain_type in ["deep_water", "shallow_water"]:
-				_add_water_quad(st, tile_pos, _is_shore_tile(tile_pos))
+	var v0 := Vector3(-half_width, WATER_LEVEL, -half_height)
+	var v1 := Vector3(half_width, WATER_LEVEL, -half_height)
+	var v2 := Vector3(half_width, WATER_LEVEL, half_height)
+	var v3 := Vector3(-half_width, WATER_LEVEL, half_height)
+
+	st.set_uv(Vector2(0.0, 0.0))
+	st.add_vertex(v0)
+	st.set_uv(Vector2(1.0, 0.0))
+	st.add_vertex(v1)
+	st.set_uv(Vector2(1.0, 1.0))
+	st.add_vertex(v2)
+
+	st.set_uv(Vector2(0.0, 0.0))
+	st.add_vertex(v0)
+	st.set_uv(Vector2(1.0, 1.0))
+	st.add_vertex(v2)
+	st.set_uv(Vector2(0.0, 1.0))
+	st.add_vertex(v3)
 
 	st.generate_normals()
 
@@ -108,55 +118,6 @@ func _create_water_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 	mi.material_override = shader_mat
 
 	return mi
-
-func _add_water_quad(st: SurfaceTool, tile_pos: Vector2i, is_shore: bool):
-	var h := TILE_SIZE * 0.5
-	var center := grid_to_world(tile_pos)
-	var y := WATER_LEVEL
-	var v0 := Vector3(center.x - h, y, center.z - h)
-	var v1 := Vector3(center.x + h, y, center.z - h)
-	var v2 := Vector3(center.x + h, y, center.z + h)
-	var v3 := Vector3(center.x - h, y, center.z + h)
-
-	var uv0 := Vector2(0.0, 0.0)
-	var uv1 := Vector2(1.0, 0.0)
-	var uv2 := Vector2(1.0, 1.0)
-	var uv3 := Vector2(0.0, 1.0)
-
-	var shore_mask := 1.0 if is_shore else 0.0
-	var shore_color := Color(shore_mask, 0.0, 0.0, 1.0)
-
-	st.set_color(shore_color)
-	st.set_uv(uv0)
-	st.add_vertex(v0)
-	st.set_color(shore_color)
-	st.set_uv(uv1)
-	st.add_vertex(v1)
-	st.set_color(shore_color)
-	st.set_uv(uv2)
-	st.add_vertex(v2)
-
-	st.set_color(shore_color)
-	st.set_uv(uv0)
-	st.add_vertex(v0)
-	st.set_color(shore_color)
-	st.set_uv(uv2)
-	st.add_vertex(v2)
-	st.set_color(shore_color)
-	st.set_uv(uv3)
-	st.add_vertex(v3)
-
-func _is_shore_tile(tile_pos: Vector2i) -> bool:
-	for dx in range(-1, 2):
-		for dy in range(-1, 2):
-			if dx == 0 and dy == 0:
-				continue
-			var check_pos = tile_pos + Vector2i(dx, dy)
-			if not is_valid_pos(check_pos):
-				continue
-			if grid[check_pos.x][check_pos.y]["type"] not in ["deep_water", "shallow_water"]:
-				return true
-	return false
 
 func _add_subdivided_tile(
 	st: SurfaceTool,
