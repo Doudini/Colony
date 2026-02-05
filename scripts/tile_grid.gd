@@ -10,6 +10,7 @@ const CHUNK_SIZE := 16
 var grid: Array = []
 var resource_deposits: Dictionary = {}
 var chunk_meshes: Dictionary = {}
+var corner_grid: Array = []
 
 # Terrain noise layers
 var height_noise: FastNoiseLite
@@ -27,7 +28,7 @@ const RESOURCE_CONFIGS := {
 		"min_size": 3,
 		"max_size": 8,
 		"allowed_types": ["ground", "highland", "mountain"],
-		"forbidden_types": ["deep_water", "shallow_water", "beach"],
+		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
 	},
@@ -36,7 +37,7 @@ const RESOURCE_CONFIGS := {
 		"min_size": 3,
 		"max_size": 8,
 		"allowed_types": ["ground", "highland", "mountain"],
-		"forbidden_types": ["deep_water", "shallow_water", "beach"],
+		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
 	},
@@ -45,7 +46,7 @@ const RESOURCE_CONFIGS := {
 		"min_size": 3,
 		"max_size": 8,
 		"allowed_types": ["ground", "highland", "mountain"],
-		"forbidden_types": ["deep_water", "shallow_water", "beach"],
+		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
 	},
@@ -54,7 +55,7 @@ const RESOURCE_CONFIGS := {
 		"min_size": 1,
 		"max_size": 4,
 		"allowed_types": ["ground", "highland", "mountain"],
-		"forbidden_types": ["deep_water", "shallow_water", "beach"],
+		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
 	},
@@ -89,159 +90,153 @@ const RESOURCE_CONFIGS := {
 }
 
 # =========================
-# TERRAIN LAYER SYSTEM (Alpha Mask Blending)
+# TERRAIN AUTOTILING CONFIG
 # =========================
 
-# Render order: bottom to top (index 0 renders first, at bottom)
-# Each layer blends onto the layers below using alpha masks
-const TERRAIN_RENDER_ORDER := [
-	"deep_water",    # Layer 0 - base water (no mask, fully opaque)
-	"shallow_water", # Layer 1 - blends onto deep_water
-	"beach",         # Layer 2 - blends onto water
-	"grassland",     # Layer 3 - blends onto beach (lowland uses same)
-	"forest",        # Layer 4 - blends onto grassland
-	"ground",        # Layer 5 - blends onto grassland
-	"highland",      # Layer 6 - blends onto ground
-	"mountain",      # Layer 7 - blends onto highland
-]
-
-# Priority determines which terrain "wins" at boundaries
-# Higher priority = rendered on top, masks out lower priority
+# Terrain priority for transitions (higher = more dominant)
 const TERRAIN_PRIORITY := {
-	"deep_water": 0,
-	"shallow_water": 1,
-	"beach": 2,
-	"grassland": 3,
-	"lowland": 3,     # Same as grassland
-	"forest": 4,
-	"ground": 5,
-	"highland": 6,
-	"mountain": 7
+	"deep_water": 100,
+	"shallow_water": 90,
+	"beach": 80,
+	"marsh": 70,
+	"grassland": 60,
+	"lowland": 60,  # Same as grassland
+	"forest": 50,
+	"ground": 40,
+	"highland": 30,
+	"mountain": 20
 }
 
-# Map terrain types to their base texture row in the atlas
-const TERRAIN_TEXTURE_ROW := {
-	"deep_water": 0,
-	"shallow_water": 0,  # Same water texture, different layer
-	"beach": 1,
-	"grassland": 2,
-	"lowland": 2,        # Uses grassland texture
-	"forest": 3,
-	"ground": 4,
-	"highland": 5,
-	"mountain": 6
+# Each terrain type transitions to a higher-priority terrain
+const TERRAIN_TRANSITIONS := {
+	"grassland": "beach",
+	"lowland": "beach",
+	"forest": "grassland",
+	"ground": "grassland",
+	"highland": "ground",
+	"mountain": "highland",
+	"marsh": "shallow_water",
+	"beach": "shallow_water"
 }
 
-# Base terrain colors (used when no texture available)
-const TERRAIN_COLORS := {
-	"deep_water": Color(0.05, 0.15, 0.35),
-	"shallow_water": Color(0.15, 0.35, 0.55),
-	"beach": Color(0.85, 0.78, 0.55),
-	"grassland": Color(0.35, 0.55, 0.25),
-	"lowland": Color(0.35, 0.55, 0.25),
-	"forest": Color(0.15, 0.40, 0.15),
-	"ground": Color(0.45, 0.40, 0.35),
-	"highland": Color(0.55, 0.50, 0.45),
-	"mountain": Color(0.60, 0.58, 0.55)
+# Texture atlas configuration
+# Each terrain needs a tileset in the atlas
+const ATLAS_CONFIG := {
+	"beach": {
+		"row": 0,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"grassland": {
+		"row": 1,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 5
+	},
+	"lowland": {
+		"row": 1,  # Same as grassland
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 5
+	},
+	"forest": {
+		"row": 2,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 5
+	},
+	"ground": {
+		"row": 3,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"highland": {
+		"row": 4,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"mountain": {
+		"row": 5,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"marsh": {
+		"row": 6,
+		"has_transitions": true,
+		"tile_count": 16,
+		"variations": 3
+	},
+	"shallow_water": {
+		"row": 7,
+		"has_transitions": false,
+		"tile_count": 4,
+		"variations": 2
+	},
+	"deep_water": {
+		"row": 7,
+		"has_transitions": false,
+		"tile_count": 4,
+		"variations": 2
+	}
 }
 
-# =========================
-# TEXTURE SETTINGS
-# =========================
-
-const MASK_COUNT := 16  # 16 marching squares masks
-
-# Exported textures - assign in editor
-@export var terrain_textures: Array[Texture2D] = []  # One texture per terrain type
-@export var alpha_mask_texture: Texture2D  # 16 alpha masks in a row
-@export var terrain_atlas: Texture2D  # Legacy: old tileset (fallback)
-
-# Shader for terrain blending
-var terrain_shader: Shader
-
-# Layer meshes stored per chunk
-var layer_meshes: Dictionary = {}  # chunk_coord -> Array of MeshInstance3D
+# Texture atlas settings
+const ATLAS_TILE_SIZE := 16  # Size of each tile in pixels
+const ATLAS_TILES_PER_ROW := 16  # 16 tiles per row (marching squares + variations)
+@export var terrain_atlas: Texture2D  # Assigned in editor
 
 # =========================
 # LIFECYCLE
 # =========================
 
 func _ready():
-	_load_resources()
 	_initialize_grid()
 	_setup_noise()
 	_generate_terrain()
 	_assign_terrain_types()
 	_add_beaches()
+	_add_marshes()
 	_smooth_terrain()
 	_place_major_rivers()
-	_add_beaches_around_water()  # Force beach buffer around all water
+	_add_beaches_around_water()  # Force beach around all water (rivers/lakes)
+	_build_corner_grid()         # Rebuild corners AFTER all terrain changes
 	_place_resource_deposits()
 	_create_visual_grid()
-
-func _load_resources():
-	"""Load shader and generate alpha masks if needed."""
-	terrain_shader = load("res://shaders/terrain_blend.gdshader")
-
-	# Generate alpha masks at runtime if not provided
-	if not alpha_mask_texture:
-		alpha_mask_texture = _generate_alpha_masks()
-		print("Generated alpha masks at runtime")
-
-func _generate_alpha_masks() -> ImageTexture:
-	"""Generate the 16 marching squares alpha masks programmatically."""
-	var tile_size := 32  # Size of each mask tile in pixels
-	var img_width := tile_size * MASK_COUNT
-	var img_height := tile_size
-
-	var image := Image.create(img_width, img_height, false, Image.FORMAT_RGBA8)
-	image.fill(Color(1, 1, 1, 0))  # Start with white, fully transparent
-
-	# Generate each mask
-	for mask_index in range(MASK_COUNT):
-		_generate_single_mask(image, mask_index, tile_size)
-
-	var texture := ImageTexture.create_from_image(image)
-	return texture
-
-func _generate_single_mask(image: Image, mask_index: int, tile_size: int):
-	"""Generate a single alpha mask based on marching squares index."""
-	var x_offset := mask_index * tile_size
-
-	# Determine which corners are "filled" (terrain present)
-	var tl := (mask_index & 1) != 0   # Top-left
-	var tr := (mask_index & 2) != 0   # Top-right
-	var br := (mask_index & 4) != 0   # Bottom-right
-	var bl := (mask_index & 8) != 0   # Bottom-left
-
-	# Generate pixels with smooth gradients using bilinear interpolation
-	for px in range(tile_size):
-		for py in range(tile_size):
-			# Normalized position (0 to 1)
-			var nx := float(px) / float(tile_size - 1)
-			var ny := float(py) / float(tile_size - 1)
-
-			# Corner values (1.0 if filled, 0.0 if not)
-			var v_tl := 1.0 if tl else 0.0
-			var v_tr := 1.0 if tr else 0.0
-			var v_br := 1.0 if br else 0.0
-			var v_bl := 1.0 if bl else 0.0
-
-			# Bilinear interpolation
-			var top := lerpf(v_tl, v_tr, nx)
-			var bottom := lerpf(v_bl, v_br, nx)
-			var alpha := lerpf(top, bottom, ny)
-
-			# Apply smoothstep for nicer gradients
-			alpha = clampf(alpha, 0.0, 1.0)
-			alpha = alpha * alpha * (3.0 - 2.0 * alpha)
-
-			var color := Color(1.0, 1.0, 1.0, alpha)
-			image.set_pixel(x_offset + px, py, color)
 
 # =========================
 # GRID SETUP
 # =========================
+func _build_corner_grid():
+	corner_grid.clear()
+	corner_grid.resize(grid_width + 1)
+
+	for x in range(grid_width + 1):
+		corner_grid[x] = []
+		for y in range(grid_height + 1):
+			corner_grid[x].append(_resolve_corner_type(x, y))
+func _resolve_corner_type(cx: int, cy: int) -> String:
+	var best_type := ""
+	var best_priority := -INF
+
+	for dx in [-1, 0]:
+		for dy in [-1, 0]:
+			var tx = cx + dx
+			var ty = cy + dy
+			if tx < 0 or ty < 0 or tx >= grid_width or ty >= grid_height:
+				continue
+
+			var t = grid[tx][ty]["type"]
+			var p = TERRAIN_PRIORITY.get(t, 0)
+
+			if p > best_priority:
+				best_priority = p
+				best_type = t
+
+	return best_type
 
 func _initialize_grid():
 	grid.clear()
@@ -389,6 +384,38 @@ func _add_beaches():
 			if near_water and grid[x][y]["height"] < 0.15:
 				grid[x][y]["type"] = "beach"
 
+func _add_marshes():
+	for x in range(grid_width):
+		for y in range(grid_height):
+			if grid[x][y]["type"] != "lowland":
+				continue
+			
+			if grid[x][y]["height"] < 0.05 and grid[x][y]["moisture"] > 0.2:
+				var water_nearby = _count_nearby_type(Vector2i(x, y), ["shallow_water", "deep_water"], 3)
+				if water_nearby >= 2:
+					grid[x][y]["type"] = "marsh"
+
+func _smooth_terrain():
+	var changes := []
+	
+	for x in range(1, grid_width - 1):
+		for y in range(1, grid_height - 1):
+			var tile_type = grid[x][y]["type"]
+			var neighbors = _get_neighbor_types(Vector2i(x, y))
+			
+			var same_count = 0
+			for neighbor_type in neighbors:
+				if neighbor_type == tile_type:
+					same_count += 1
+			
+			if same_count < 2:
+				var most_common = _get_most_common_type(neighbors)
+				if most_common != tile_type:
+					changes.append({"pos": Vector2i(x, y), "type": most_common})
+	
+	for change in changes:
+		grid[change.pos.x][change.pos.y]["type"] = change.type
+
 func _add_beaches_around_water():
 	"""Force beach tiles around ALL water bodies - guarantees transition chain"""
 	var changes := []
@@ -421,27 +448,6 @@ func _add_beaches_around_water():
 		grid[pos.x][pos.y]["type"] = "beach"
 
 	print("Added %d beach tiles around water" % changes.size())
-
-func _smooth_terrain():
-	var changes := []
-	
-	for x in range(1, grid_width - 1):
-		for y in range(1, grid_height - 1):
-			var tile_type = grid[x][y]["type"]
-			var neighbors = _get_neighbor_types(Vector2i(x, y))
-			
-			var same_count = 0
-			for neighbor_type in neighbors:
-				if neighbor_type == tile_type:
-					same_count += 1
-			
-			if same_count < 2:
-				var most_common = _get_most_common_type(neighbors)
-				if most_common != tile_type:
-					changes.append({"pos": Vector2i(x, y), "type": most_common})
-	
-	for change in changes:
-		grid[change.pos.x][change.pos.y]["type"] = change.type
 
 # =========================
 # MAJOR RIVER GENERATION
@@ -941,236 +947,282 @@ func _grow_vein_cluster(start: Vector2i, target: int, allowed: Array, forbidden:
 
 
 # =========================
-# ALPHA MASK BLENDING FUNCTIONS
+# AUTOTILING FUNCTIONS
 # =========================
+func _corner_filled(
+	corner_pos: Vector2i,
+	base_type: String,
+	base_priority: int
+) -> bool:
+	if corner_pos.x < 0 or corner_pos.y < 0 \
+	or corner_pos.x > grid_width or corner_pos.y > grid_height:
+		return true
 
-func _get_mask_index_for_tile(pos: Vector2i, terrain_type: String) -> int:
-	"""
-	Calculate the marching squares mask index for a tile.
-	The mask determines where this terrain is visible vs where lower-priority terrain shows through.
+	var t = corner_grid[corner_pos.x][corner_pos.y]
+	var p = TERRAIN_PRIORITY.get(t, 0)
 
-	Corner bits:
-	  Bit 0 (1): Top-left corner - terrain present
-	  Bit 1 (2): Top-right corner - terrain present
-	  Bit 2 (4): Bottom-right corner - terrain present
-	  Bit 3 (8): Bottom-left corner - terrain present
-	"""
-	var my_priority = TERRAIN_PRIORITY.get(terrain_type, 0)
+	# Filled if same terrain OR lower priority
+	return t == base_type or p < base_priority
+
+func _get_autotile_index(pos: Vector2i) -> int:
+	var base_type = grid[pos.x][pos.y]["type"]
+
+	if not base_type in TERRAIN_TRANSITIONS:
+		if base_type in ["shallow_water", "deep_water"]:
+			return _get_water_variation(pos)
+		return 15
+
+	var base_priority = TERRAIN_PRIORITY[base_type]
 	var mask := 0
 
-	# Check each corner by looking at the 4 tiles that share that corner
-	# A corner is "filled" if any adjacent tile has this terrain type or higher priority
-
-	# Top-left corner (tiles: current, left, top, top-left)
-	if _corner_has_terrain(pos, Vector2i(-1, 0), Vector2i(0, -1), Vector2i(-1, -1), terrain_type, my_priority):
+	if _corner_filled(pos + Vector2i(0, 0), base_type, base_priority):
 		mask |= 1
-
-	# Top-right corner (tiles: current, right, top, top-right)
-	if _corner_has_terrain(pos, Vector2i(1, 0), Vector2i(0, -1), Vector2i(1, -1), terrain_type, my_priority):
+	if _corner_filled(pos + Vector2i(1, 0), base_type, base_priority):
 		mask |= 2
-
-	# Bottom-right corner (tiles: current, right, bottom, bottom-right)
-	if _corner_has_terrain(pos, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), terrain_type, my_priority):
+	if _corner_filled(pos + Vector2i(1, 1), base_type, base_priority):
 		mask |= 4
-
-	# Bottom-left corner (tiles: current, left, bottom, bottom-left)
-	if _corner_has_terrain(pos, Vector2i(-1, 0), Vector2i(0, 1), Vector2i(-1, 1), terrain_type, my_priority):
+	if _corner_filled(pos + Vector2i(0, 1), base_type, base_priority):
 		mask |= 8
+
+	# Dual-grid ambiguity fix
+	if mask == 5 or mask == 10:
+		var center_priority := 0
+		var count := 0
+
+		for dx in [0, 1]:
+			for dy in [0, 1]:
+				var p = pos + Vector2i(dx, dy)
+				if is_valid_pos(p):
+					center_priority += TERRAIN_PRIORITY.get(grid[p.x][p.y]["type"], 0)
+					count += 1
+
+		if count > 0:
+			center_priority /= count
+
+		if center_priority < base_priority:
+			mask = 15 - mask
+
+	if mask == 15:
+		return _get_tile_variation(pos, base_type)
 
 	return mask
 
-func _corner_has_terrain(pos: Vector2i, d1: Vector2i, d2: Vector2i, d3: Vector2i, terrain_type: String, my_priority: int) -> bool:
+
+func _get_tile_variation(pos: Vector2i, tile_type: String) -> int:
 	"""
-	Check if a corner should be filled for the given terrain type.
-	A corner is filled if the current tile or any of the 3 neighbors sharing that corner
-	have this terrain type (or same priority, like lowland/grassland).
+	Returns a tile index with variation for fully surrounded tiles.
+	Uses position-based pseudo-random selection for consistency.
 	"""
-	var positions = [pos, pos + d1, pos + d2, pos + d3]
+	if not tile_type in ATLAS_CONFIG:
+		return 15
 
-	for p in positions:
-		if not is_valid_pos(p):
-			continue
-		var tile_type = grid[p.x][p.y]["type"]
-		var tile_priority = TERRAIN_PRIORITY.get(tile_type, 0)
-		# Consider filled if same terrain or same priority level (e.g., lowland = grassland)
-		if tile_priority == my_priority:
-			return true
+	var config = ATLAS_CONFIG[tile_type]
+	if config["variations"] <= 0:
+		return 15
 
-	return false
+	# Hash position for consistent pseudo-random variation
+	var seed_value = (pos.x * 73856093) ^ (pos.y * 19349663)
+	seed_value = abs(seed_value)
+	var variation = seed_value % config["variations"]
 
-func _get_mask_uv_coords(mask_index: int) -> Array:
+	# Variation tiles start after the base 16 tiles
+	return 15 # + variation
+
+func _get_water_variation(pos: Vector2i) -> int:
 	"""
-	Get UV coordinates for an alpha mask in the mask texture.
-	Masks are arranged in a single row: 16 masks, each 32x32 pixels.
+	Simple variation for water tiles (no transitions, just visual variety).
 	"""
-	var mask_size = 1.0 / float(MASK_COUNT)
-	var u_left = mask_index * mask_size
-	var u_right = (mask_index + 1) * mask_size
+	var seed_value = (pos.x * 73856093) ^ (pos.y * 19349663)
+	seed_value = abs(seed_value)
+	return seed_value % 8  # Water has 4 simple variations
 
-	# Small inset to avoid edge bleeding
-	var inset = 0.001
+func _get_tile_uv_coords(pos: Vector2i) -> Array:
+	"""
+	Returns UV coordinates [top_left, top_right, bottom_right, bottom_left]
+	for the tile at the given position based on its autotile index.
+	"""
+	var tile_type = grid[pos.x][pos.y]["type"]
 
+	if not tile_type in ATLAS_CONFIG:
+		# Fallback to a default tile
+		return _calculate_uv_for_tile(0, 0)
+
+	var config = ATLAS_CONFIG[tile_type]
+	var autotile_index = _get_autotile_index(pos)
+	var row = config["row"]
+
+	return _calculate_uv_for_tile(autotile_index, row)
+
+func _calculate_uv_for_tile(tile_index: int, atlas_row: int) -> Array:
+	"""
+	Calculates UV coordinates for a specific tile in the atlas.
+	Atlas layout: 16 tiles per row, multiple rows for different terrains.
+	Returns [top_left, top_right, bottom_right, bottom_left] UVs.
+	"""
+	# Calculate tile position in atlas
+	var tiles_per_row = ATLAS_TILES_PER_ROW
+	var col = tile_index % tiles_per_row
+	var row = atlas_row
+
+	# Assume atlas is square with tiles_per_row tiles in each direction
+	var tile_uv_size = 1.0 / float(tiles_per_row)
+
+	# Calculate UV coordinates (0,0 is top-left in UV space)
+	var u_left = col * tile_uv_size
+	var u_right = (col + 1) * tile_uv_size
+	var v_top = row * tile_uv_size
+	var v_bottom = (row + 1) * tile_uv_size
+
+	# Return as [TL, TR, BR, BL]
 	return [
-		Vector2(u_left + inset, 1.0 - inset),   # Bottom-left
-		Vector2(u_right - inset, 1.0 - inset),  # Bottom-right
-		Vector2(u_right - inset, inset),        # Top-right
-		Vector2(u_left + inset, inset),         # Top-left
-	]
+		Vector2(u_left+0.00095, v_bottom-0.00095),    # Bottom-left
+		Vector2(u_right-0.00095, v_bottom-0.00095),  # Bottom-right
+		Vector2(u_right-0.00095, v_top+0.00095),     # Top-right
+		Vector2(u_left+0.00095, v_top+0.00095),      # Top-left
 
-func _get_tile_color(tile: Dictionary) -> Color:
-	"""Get color for a tile based on terrain type."""
-	var terrain_type = tile["type"]
-	if terrain_type in TERRAIN_COLORS:
-		return TERRAIN_COLORS[terrain_type]
-	return Color.GRAY
+	]
+	#return [
+		#Vector2(u_right, v_bottom),  # Bottom-right
+		#Vector2(u_left, v_bottom),    # Bottom-left
+		#
+		#Vector2(u_left, v_top),      # Top-left
+		#Vector2(u_right, v_top),     # Top-right
+	#]
 
 # =========================
-# LAYERED CHUNK MESH GENERATION
+# CHUNK MESH GENERATION
 # =========================
 
 func _create_visual_grid():
-	"""Create the visual terrain using layered alpha mask blending."""
 	var cx := ceili(grid_width / float(CHUNK_SIZE))
 	var cy := ceili(grid_height / float(CHUNK_SIZE))
-	print("Creating %d chunks with %d terrain layers" % [cx * cy, TERRAIN_RENDER_ORDER.size()])
+	print("Creating %d chunks" % (cx * cy))
 
 	for x in range(cx):
 		for y in range(cy):
 			var coord := Vector2i(x, y)
-			var chunk_container := _create_layered_chunk(coord)
-			layer_meshes[coord] = chunk_container
-			add_child(chunk_container)
+			var mesh := _create_chunk_mesh(coord)
+			chunk_meshes[coord] = mesh
+			add_child(mesh)
 
-func _create_layered_chunk(chunk: Vector2i) -> Node3D:
-	"""Create a chunk with multiple terrain layers for alpha blending."""
-	var container := Node3D.new()
-	container.name = "Chunk_%d_%d" % [chunk.x, chunk.y]
-
-	var sx := chunk.x * CHUNK_SIZE
-	var sy := chunk.y * CHUNK_SIZE
-	var ex := mini(sx + CHUNK_SIZE, grid_width)
-	var ey := mini(sy + CHUNK_SIZE, grid_height)
-
-	# Create a layer for each terrain type in render order
-	var layer_height := 0.0
-	var height_step := 0.001  # Small height offset to prevent z-fighting
-
-	for terrain_type in TERRAIN_RENDER_ORDER:
-		var layer_mesh := _create_terrain_layer(chunk, terrain_type, sx, sy, ex, ey, layer_height)
-		if layer_mesh:
-			container.add_child(layer_mesh)
-		layer_height += height_step
-
-	return container
-
-func _create_terrain_layer(chunk: Vector2i, terrain_type: String, sx: int, sy: int, ex: int, ey: int, y_offset: float) -> MeshInstance3D:
-	"""Create a mesh layer for a single terrain type within a chunk."""
+func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var tile_count := 0
-	var terrain_priority := TERRAIN_PRIORITY.get(terrain_type, 0)
+	var sx := chunk.x * CHUNK_SIZE
+	var sy := chunk.y * CHUNK_SIZE
+	var ex = min(sx + CHUNK_SIZE, grid_width)
+	var ey = min(sy + CHUNK_SIZE, grid_height)
 
-	# Collect all tiles that need this terrain layer
 	for x in range(sx, ex):
 		for y in range(sy, ey):
-			var tile_pos := Vector2i(x, y)
-			var tile_type := grid[x][y]["type"]
-			var tile_priority := TERRAIN_PRIORITY.get(tile_type, 0)
+			var tile_pos = Vector2i(x, y)
 
-			# This tile contributes to this layer if:
-			# 1. It IS this terrain type, OR
-			# 2. It's lower priority and needs this terrain to blend onto
-
-			# Calculate mask for this terrain at this position
-			var mask_index := _get_mask_index_for_tile(tile_pos, terrain_type)
-
-			# Skip if mask is 0 (terrain not present at any corner)
-			if mask_index == 0:
-				continue
-
-			# Get world position
-			var world_pos := grid_to_world(tile_pos)
-			world_pos.y = y_offset
-
-			# Get mask UV coordinates
-			var mask_uvs := _get_mask_uv_coords(mask_index)
-
-			# Get terrain color
-			var color := TERRAIN_COLORS.get(terrain_type, Color.GRAY)
-
-			# Add the quad
-			_add_layer_quad(st, world_pos, mask_uvs, color)
-			tile_count += 1
-
-	# Skip empty layers
-	if tile_count == 0:
-		return null
+			# Use UV mapping if texture atlas is available
+			if terrain_atlas:
+				var uv_coords = _get_tile_uv_coords(tile_pos)
+				_add_quad_with_uv(st, grid_to_world(tile_pos), uv_coords)
+			else:
+				# Fallback to vertex colors if no atlas
+				var color := _get_tile_color(grid[x][y])
+				_add_quad_with_color(st, grid_to_world(tile_pos), color)
 
 	st.generate_normals()
 
 	var mi := MeshInstance3D.new()
-	mi.name = "Layer_" + terrain_type
 	mi.mesh = st.commit()
 
-	# Create material for this layer
-	var mat := _create_layer_material(terrain_type)
-	mi.material_override = mat
+	# Use shader material for alpha blending from texture atlas
+	if terrain_atlas:
+		var shader = load("res://shaders/terrain_blend.gdshader")
+		var mat := ShaderMaterial.new()
+		mat.shader = shader
+		mat.set_shader_parameter("terrain_atlas", terrain_atlas)
+		mi.material_override = mat
+	else:
+		# Fallback to vertex colors
+		var mat := StandardMaterial3D.new()
+		mat.vertex_color_use_as_albedo = true
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+		mi.material_override = mat
 
 	return mi
 
-func _add_layer_quad(st: SurfaceTool, pos: Vector3, uv_coords: Array, color: Color):
-	"""Add a quad for a terrain layer with mask UVs and color."""
-	var h := TILE_SIZE * 0.5
-	var v0 := Vector3(pos.x - h, pos.y, pos.z - h)  # Top-left
-	var v1 := Vector3(pos.x + h, pos.y, pos.z - h)  # Top-right
-	var v2 := Vector3(pos.x + h, pos.y, pos.z + h)  # Bottom-right
-	var v3 := Vector3(pos.x - h, pos.y, pos.z + h)  # Bottom-left
+func _add_quad_with_uv(st: SurfaceTool, pos: Vector3, uv_coords: Array):
+	"""
+	Adds a quad with UV texture coordinates.
+	uv_coords should be [top_left, top_right, bottom_right, bottom_left].
+	"""
+	var h := TILE_SIZE * 0.5 # 0.5 controls the spacing
+	var v0 := Vector3(pos.x - h, 0, pos.z - h)  # Top-left
+	var v1 := Vector3(pos.x + h, 0, pos.z - h)  # Top-right
+	var v2 := Vector3(pos.x + h, 0, pos.z + h)  # Bottom-right
+	var v3 := Vector3(pos.x - h, 0, pos.z + h)  # Bottom-left
 
 	# First triangle (v0, v1, v2)
-	st.set_color(color)
-	st.set_uv(uv_coords[3])  # Top-left UV
+	st.set_uv(uv_coords[0])  # Top-left UV
 	st.add_vertex(v0)
-	st.set_color(color)
-	st.set_uv(uv_coords[2])  # Top-right UV
+	st.set_uv(uv_coords[1])  # Top-right UV
 	st.add_vertex(v1)
-	st.set_color(color)
-	st.set_uv(uv_coords[1])  # Bottom-right UV
+	st.set_uv(uv_coords[2])  # Bottom-right UV
 	st.add_vertex(v2)
 
 	# Second triangle (v0, v2, v3)
-	st.set_color(color)
-	st.set_uv(uv_coords[3])  # Top-left UV
+	st.set_uv(uv_coords[0])  # Top-left UV
 	st.add_vertex(v0)
-	st.set_color(color)
-	st.set_uv(uv_coords[1])  # Bottom-right UV
+	st.set_uv(uv_coords[2])  # Bottom-right UV
 	st.add_vertex(v2)
-	st.set_color(color)
-	st.set_uv(uv_coords[0])  # Bottom-left UV
+	st.set_uv(uv_coords[3])  # Bottom-left UV
 	st.add_vertex(v3)
 
-func _create_layer_material(terrain_type: String) -> Material:
-	"""Create a material for a terrain layer with alpha mask support."""
+func _add_quad_with_color(st: SurfaceTool, pos: Vector3, color: Color):
+	"""
+	Adds a quad with vertex color (fallback when no texture atlas is available).
+	"""
+	var h := TILE_SIZE * 0.5 # controls spacing of cells
+	var v0 := Vector3(pos.x - h, 0, pos.z - h)
+	var v1 := Vector3(pos.x + h, 0, pos.z - h)
+	var v2 := Vector3(pos.x + h, 0, pos.z + h)
+	var v3 := Vector3(pos.x - h, 0, pos.z + h)
 
-	# Use shader material if we have the alpha mask texture
-	if alpha_mask_texture and terrain_shader:
-		var mat := ShaderMaterial.new()
-		mat.shader = terrain_shader
-		mat.set_shader_parameter("alpha_mask_texture", alpha_mask_texture)
-		mat.set_shader_parameter("texture_scale", 1.0)
-		return mat
+	st.set_color(color)
+	st.add_vertex(v0)
+	st.add_vertex(v1)
+	st.add_vertex(v2)
+	st.add_vertex(v0)
+	st.add_vertex(v2)
+	st.add_vertex(v3)
 
-	# Fallback to standard material with vertex colors
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+func _get_tile_color(tile: Dictionary) -> Color:
+	if tile["resource"]:
+		if has_node("/root/GameData"):
+			var res = GameData.get_resource_by_id(tile["resource"])
+			if res:
+				return res.color
+		else:
+			match tile["resource"]:
+				"minerals": return Color(0.6, 0.6, 0.7)
+				"biomatter": return Color(0.4, 0.6, 0.3)
+				"hydrogen": return Color(0.7, 0.8, 0.9)
+				"crystals": return Color(0.8, 0.6, 0.9)
+				"wood": return Color(0.15, 0.45, 0.15)
+				"ore": return Color(0.7, 0.5, 0.3)
+				"rare_minerals": return Color(0.9, 0.7, 0.3)
+				"water": return Color(0.2, 0.4, 0.8)
 
-	# Enable transparency for all layers except the base (deep_water)
-	if terrain_type != "deep_water":
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+	match tile["type"]:
+		"deep_water": return Color(0.05, 0.1, 0.25)
+		"shallow_water": return Color(0.1, 0.25, 0.4)
+		"beach": return Color(0.8, 0.75, 0.6)
+		"marsh": return Color(0.2, 0.3, 0.25)
+		"lowland": return Color(0.3, 0.5, 0.3)
+		"grassland": return Color(0.4, 0.55, 0.3)
+		"forest": return Color(0.2, 0.4, 0.2)
+		"ground": return Color(0.4, 0.4, 0.35)
+		"highland": return Color(0.5, 0.45, 0.4)
+		"mountain": return Color(0.55, 0.5, 0.45)
 
-	return mat
+	return Color.GRAY
 
 # =========================
 # UTILS
