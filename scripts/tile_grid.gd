@@ -1132,20 +1132,19 @@ func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = st.commit()
 
-	var mat := StandardMaterial3D.new()
-
-	# Use texture atlas if available
+	# Use shader material for alpha blending from texture atlas
 	if terrain_atlas:
-		mat.albedo_texture = terrain_atlas
-		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST  # Pixel art style
-		mat.texture_repeat = false
-
+		var shader = load("res://shaders/terrain_blend.gdshader")
+		var mat := ShaderMaterial.new()
+		mat.shader = shader
+		mat.set_shader_parameter("terrain_atlas", terrain_atlas)
+		mi.material_override = mat
 	else:
 		# Fallback to vertex colors
+		var mat := StandardMaterial3D.new()
 		mat.vertex_color_use_as_albedo = true
-
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	mi.material_override = mat
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+		mi.material_override = mat
 
 	return mi
 
