@@ -1031,10 +1031,10 @@ func _calculate_uv_for_tile(tile_index: int, atlas_row: int) -> Array:
 
 	# Return as [TL, TR, BR, BL]
 	return [
-		Vector2(u_left+0.00095, v_bottom-0.00095),    # Bottom-left
-		Vector2(u_right-0.00095, v_bottom-0.00095),  # Bottom-right
-		Vector2(u_right-0.00095, v_top+0.00095),     # Top-right
-		Vector2(u_left+0.00095, v_top+0.00095),      # Top-left
+		Vector2(u_left+0.0001, v_bottom-0.0001),    # Bottom-left
+		Vector2(u_right-0.0001, v_bottom-0.0001),  # Bottom-right
+		Vector2(u_right-0.0001, v_top+0.0001),     # Top-right
+		Vector2(u_left+0.0001, v_top+0.0001),      # Top-left
 
 	]
 	#return [
