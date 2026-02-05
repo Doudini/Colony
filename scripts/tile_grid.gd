@@ -198,12 +198,12 @@ func _ready():
 	_setup_noise()
 	_generate_terrain()
 	_assign_terrain_types()
-	_add_beaches()
+	
 	_add_marshes()
 	_smooth_terrain()
-	_place_major_rivers()
-	_add_beaches_around_water()  # Force beach around all water (rivers/lakes)
-	_build_corner_grid()         # Rebuild corners AFTER all terrain changes
+	_place_major_rivers()  # New: Place long rivers first
+	_add_beaches()
+	_build_corner_grid()
 	_place_resource_deposits()
 	_create_visual_grid()
 
@@ -415,39 +415,6 @@ func _smooth_terrain():
 	
 	for change in changes:
 		grid[change.pos.x][change.pos.y]["type"] = change.type
-
-func _add_beaches_around_water():
-	"""Force beach tiles around ALL water bodies - guarantees transition chain"""
-	var changes := []
-
-	for x in range(grid_width):
-		for y in range(grid_height):
-			# Skip if already water or beach
-			if grid[x][y]["type"] in ["deep_water", "shallow_water", "beach"]:
-				continue
-
-			# Check if adjacent to any water
-			var adjacent_to_water = false
-			for dx in range(-1, 2):
-				for dy in range(-1, 2):
-					if dx == 0 and dy == 0:
-						continue
-					var check_pos = Vector2i(x + dx, y + dy)
-					if is_valid_pos(check_pos):
-						if grid[check_pos.x][check_pos.y]["type"] in ["shallow_water", "deep_water"]:
-							adjacent_to_water = true
-							break
-				if adjacent_to_water:
-					break
-
-			# Convert to beach if next to water
-			if adjacent_to_water:
-				changes.append(Vector2i(x, y))
-
-	for pos in changes:
-		grid[pos.x][pos.y]["type"] = "beach"
-
-	print("Added %d beach tiles around water" % changes.size())
 
 # =========================
 # MAJOR RIVER GENERATION
@@ -1132,19 +1099,20 @@ func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = st.commit()
 
-	# Use shader material for alpha blending from texture atlas
+	var mat := StandardMaterial3D.new()
+
+	# Use texture atlas if available
 	if terrain_atlas:
-		var shader = load("res://shaders/terrain_blend.gdshader")
-		var mat := ShaderMaterial.new()
-		mat.shader = shader
-		mat.set_shader_parameter("terrain_atlas", terrain_atlas)
-		mi.material_override = mat
+		mat.albedo_texture = terrain_atlas
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST  # Pixel art style
+		mat.texture_repeat = false
+
 	else:
 		# Fallback to vertex colors
-		var mat := StandardMaterial3D.new()
 		mat.vertex_color_use_as_albedo = true
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-		mi.material_override = mat
+
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	mi.material_override = mat
 
 	return mi
 
