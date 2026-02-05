@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://bg56vuqy6ihdv" path="res://scripts/isometric_camera.gd" id="2"]
 [ext_resource type="Script" uid="uid://745kscm3s30p" path="res://scripts/tile_grid.gd" id="3"]
 [ext_resource type="Script" uid="uid://ettjpehl4bl" path="res://scripts/building_manager.gd" id="4"]
-[ext_resource type="Texture2D" uid="uid://d0wrm4hrluowi" path="res://tex/terrain_tileset_v4.png" id="4_5i7v8"]
+[ext_resource type="Texture2D" uid="uid://bkgucvw7h8ojy" path="res://tex/terrain_tileset_v5.png" id="4_5i7v8"]
 [ext_resource type="Script" uid="uid://smrqwv25bkk8" path="res://scripts/clean_modern_ui.gd" id="5"]
 [ext_resource type="Script" uid="uid://bryxgcbgep5fn" path="res://scripts/debug_overlay.gd" id="6"]
 [ext_resource type="Script" uid="uid://dnbjqnnwc1h04" path="res://scripts/hover_detector.gd" id="7"]
