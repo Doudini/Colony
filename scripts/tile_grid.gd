@@ -169,8 +169,9 @@ func _ready():
 	_generate_terrain()
 	_assign_terrain_types()
 	
-	_add_marshes()
+	#_add_marshes()
 	_smooth_terrain()
+	
 	_place_major_rivers()  # New: Place long rivers first
 	_add_beaches()
 	_build_corner_grid()
@@ -394,7 +395,7 @@ func _place_major_rivers():
 	"""Generate long rivers using A* pathfinding from mountains to ocean"""
 	print("=== GENERATING MAJOR RIVERS ===")
 	
-	var target_water_tiles = 800  # Minimum water resource tiles we want
+	var target_water_tiles = 500  # Minimum water resource tiles we want
 	var current_water_tiles = 0
 	
 	var river_count = 0
@@ -961,7 +962,7 @@ func _get_terrain_variation(pos: Vector2i, tile_type: String) -> int:
 func _get_transition_terrain(pos: Vector2i, base_type: String) -> String:
 	var base_priority = TERRAIN_PRIORITY.get(base_type, 0)
 	var best_type := base_type
-	var best_priority := base_priority
+	var best_priority = base_priority
 
 	for corner_offset in [
 		Vector2i(0, 0),

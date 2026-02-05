@@ -53,9 +53,6 @@ func _ready():
 	print("🔬 Tech Tree - Build R&D to unlock")
 	print("==================================================")
 
-func _process(delta):
-	GameState.tick_research(delta)
-
 func _on_building_right_clicked(grid_pos: Vector2i, building_id: String, world_pos: Vector3):
 	"""Handle building right-click - show context menu"""
 	print("🖱️ Right-clicked building at %s" % grid_pos)

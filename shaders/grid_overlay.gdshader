@@ -1,5 +1,6 @@
 shader_type spatial;
-render_mode unshaded, depth_draw_always, cull_disabled;
+//render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;
+render_mode unshaded, blend_mix;
 
 uniform float tile_size = 1.0;
 uniform float line_width_px = 1.0;
