@@ -1,17 +1,23 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_lambert, specular_disabled;
 
-// Terrain texture atlas (with alpha masks baked into each tile)
+// Terrain texture atlas (terrain variations + alpha mask row)
 uniform sampler2D terrain_atlas : source_color, filter_nearest, repeat_disable;
 
+const float TILES_PER_ROW = 16.0;
+const float MASK_ROW = 9.0;
+
 void fragment() {
-	// Sample the terrain atlas - UV comes from marching squares calculation
-	vec4 tex_sample = texture(terrain_atlas, UV);
+	vec4 base_color = texture(terrain_atlas, UV);
+	vec4 transition_color = texture(terrain_atlas, UV2);
 
-	ALBEDO = tex_sample.rgb;
-	ALPHA = tex_sample.a;
+	float mask_col = floor(COLOR.r * TILES_PER_ROW + 0.5);
+	vec2 mask_uv = vec2(
+		(mask_col + fract(UV.x * TILES_PER_ROW)) / TILES_PER_ROW,
+		(MASK_ROW + fract(UV.y * TILES_PER_ROW)) / TILES_PER_ROW
+	);
+	float mask = texture(terrain_atlas, mask_uv).a;
 
-	// Optional: slight darkening at edges for depth perception
-	float edge_darken = smoothstep(0.0, 0.5, tex_sample.a);
-	ALBEDO *= mix(0.9, 1.0, edge_darken);
+	ALBEDO = mix(transition_color.rgb, base_color.rgb, mask);
+	ALPHA = 1.0;
 }
