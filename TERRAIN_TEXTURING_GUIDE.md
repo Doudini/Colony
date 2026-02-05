@@ -2,7 +2,7 @@
 
 ## Overview
 
-The marching squares autotiling system has been successfully implemented in `scripts/tile_grid.gd`. This system uses a priority-based transition approach to create smooth terrain transitions with minimal texture requirements.
+The marching squares autotiling system in `scripts/tile_grid.gd` now uses alpha mask blending to create terrain transitions. Each tile renders two terrain layers (base + transition) and blends them using a mask row in the atlas.
 
 ## What Was Implemented
 
@@ -13,36 +13,29 @@ The marching squares autotiling system has been successfully implemented in `scr
 - Beach/Marsh in the middle (80, 70)
 - Land types decrease in priority (60 → 20)
 
-**TERRAIN_TRANSITIONS**: Maps each terrain to its transition target
-- Grassland → Beach
-- Beach → Shallow Water
-- Forest → Grassland
-- etc.
-
 **ATLAS_CONFIG**: Defines texture atlas layout
 - Each terrain assigned a row in the atlas
-- Specifies tile count and variation count
-- Currently configured for 128px tiles, 16 tiles per row
+- Each row contains 16 solid variations (no baked transitions)
+- Alpha masks live in a dedicated mask row
 
 ### 2. Autotiling Functions
 
 **`_get_autotile_index(pos: Vector2i) -> int`**
 - Core marching squares algorithm
-- Checks 4 cardinal neighbors (N, E, S, W)
+- Checks the 4 tile corners via the corner grid
 - Returns bitmask 0-15 indicating which neighbors to transition to
-- Handles tile variations for solid center tiles
 
-**`_get_tile_variation(pos: Vector2i, tile_type: String) -> int`**
+**`_get_terrain_variation(pos: Vector2i, tile_type: String) -> int`**
 - Position-based pseudo-random variation selection
 - Ensures consistency (same tile always gets same variation)
-- Returns indices 15+ for variation tiles
+- Returns 0-15 for the terrain row
 
-**`_get_water_variation(pos: Vector2i) -> int`**
-- Simple variation for water (no transitions needed)
-- Returns 0-3 for water tile variations
+**`_get_transition_terrain(pos: Vector2i, base_type: String) -> String`**
+- Finds the highest-priority neighbor in the corner grid
+- Used as the transition layer for alpha blending
 
-**`_get_tile_uv_coords(pos: Vector2i) -> Array`**
-- Returns UV coordinates for a tile based on its type and neighbors
+**`_get_tile_layer_data(pos: Vector2i) -> Dictionary`**
+- Returns base UVs, transition UVs, and mask index
 - Coordinates are [top_left, top_right, bottom_right, bottom_left]
 
 **`_calculate_uv_for_tile(tile_index: int, atlas_row: int) -> Array`**
@@ -52,13 +45,12 @@ The marching squares autotiling system has been successfully implemented in `scr
 ### 3. Rendering Updates
 
 **`_create_chunk_mesh(chunk: Vector2i)`** - Modified
-- Now supports both texture atlas and vertex color fallback
-- Automatically uses texture if `terrain_atlas` is assigned
-- Falls back to colors if atlas is missing
+- Uses a ShaderMaterial for alpha blending when `terrain_atlas` is assigned
+- Falls back to vertex colors if atlas is missing
 
-**`_add_quad_with_uv(st: SurfaceTool, pos: Vector3, uv_coords: Array)`** - New
-- Adds quad geometry with UV texture coordinates
-- Properly maps UVs to vertices
+**`_add_quad_with_layers(st: SurfaceTool, pos: Vector3, base_uv: Array, transition_uv: Array, mask_index: int)`**
+- Adds quad geometry with UV, UV2, and per-vertex mask index
+- Encodes mask index in vertex color for the shader
 
 **`_add_quad_with_color(st: SurfaceTool, pos: Vector3, color: Color)`** - Renamed
 - Original color-based quad creation (for fallback)
@@ -69,21 +61,23 @@ The marching squares autotiling system has been successfully implemented in `scr
 
 Create a texture atlas with the following specifications:
 
-**Atlas Dimensions**: 2048 x 2048 pixels (or 16 x 16 tiles at 128px each)
+**Atlas Dimensions**: 256 x 256 pixels (16 x 16 tiles at 16px each)
 
-**Layout** (each row is 128px tall):
+**Layout** (each row is 16px tall):
 ```
-Row 0:  Beach tiles         (16 tiles: indices 0-15, then variations)
-Row 1:  Grassland tiles     (16 tiles: indices 0-15, then variations)
-Row 2:  Forest tiles        (16 tiles: indices 0-15, then variations)
-Row 3:  Ground tiles        (16 tiles: indices 0-15, then variations)
-Row 4:  Highland tiles      (16 tiles: indices 0-15, then variations)
-Row 5:  Mountain tiles      (16 tiles: indices 0-15, then variations)
-Row 6:  Marsh tiles         (16 tiles: indices 0-15, then variations)
-Row 7:  Water tiles         (4-8 simple tiles)
+Row 0:  Deep water variations (16 tiles)
+Row 1:  Shallow water variations (16 tiles)
+Row 2:  Beach variations (16 tiles)
+Row 3:  Marsh variations (16 tiles)
+Row 4:  Grassland/Lowland variations (16 tiles)
+Row 5:  Forest variations (16 tiles)
+Row 6:  Ground variations (16 tiles)
+Row 7:  Highland variations (16 tiles)
+Row 8:  Mountain variations (16 tiles)
+Row 9:  Alpha mask tiles for marching squares (16 tiles)
 ```
 
-**Marching Squares Tile Order** (indices 0-15):
+**Marching Squares Mask Tile Order** (indices 0-15):
 ```
 Index  | N E S W | Description
 -------|---------|-------------
@@ -132,10 +126,8 @@ If you need to adjust the atlas layout:
 ```gdscript
 const ATLAS_CONFIG := {
     "beach": {
-        "row": 0,              # Which row in atlas
-        "has_transitions": true,
-        "tile_count": 16,
-        "variations": 3        # How many variation tiles
+        "row": 2,              # Which row in atlas
+        "variations": 16       # How many solid variations
     },
     # ... etc
 }
@@ -143,61 +135,43 @@ const ATLAS_CONFIG := {
 
 **Modify atlas size** (around line 173):
 ```gdscript
-const ATLAS_TILE_SIZE := 128  # Pixels per tile
+const ATLAS_TILE_SIZE := 16  # Pixels per tile
 const ATLAS_TILES_PER_ROW := 16  # Tiles per row
+const MASK_ROW := 9
 ```
 
 ## How the Priority System Works
 
-**Example: Grass → Beach → Ocean**
+**Example: Grass → Beach → Water**
 
-1. **Ocean (deep_water) tile:**
+1. **Deep water tile:**
    - Priority: 100 (highest)
-   - No transitions defined (solid tiles)
-   - Uses simple variations (0-3)
+   - No higher-priority neighbors, so mask index is 15
+   - Uses deep water variation tiles
 
-2. **Beach tile next to ocean:**
+2. **Beach tile next to water:**
    - Priority: 80
-   - Transitions to: shallow_water (priority 90)
-   - Checks neighbors: finds water to the east
-   - Result: Shows beach-to-water transition on east edge
-   - **Uses: beach tileset, index based on water neighbor positions**
+   - Detects higher-priority shallow/deep water at corners
+   - Uses beach variations as the base layer
+   - Uses water variations as the transition layer
+   - Mask index selects which alpha mask tile to blend
 
 3. **Grass tile next to beach:**
    - Priority: 60
-   - Transitions to: beach (priority 80)
-   - Checks neighbors: finds beach to the north
-   - Result: Shows grass-to-beach transition on north edge
-   - **Uses: grassland tileset, index based on beach neighbor positions**
-
-4. **Grass tile directly next to ocean** (rare case):
-   - Priority: 60
-   - Transitions to: beach (priority 80)
-   - Checks neighbors: finds water (priority 90) instead
-   - Water priority > grass priority, so treats as transition
-   - Result: Shows grass transitioning (uses beach transition as fallback)
+   - Detects beach as the highest-priority neighbor
+   - Blends grass variations over beach variations using the mask row
 
 ## Tileset Creation Tips
 
-### Creating Marching Squares Tilesets
+### Creating Alpha Masks
 
-1. **Start with the corners** (indices 3, 6, 9, 12)
-   - These are your foundation pieces
-   - Make sure curves are smooth
-
-2. **Create the edges** (indices 1, 2, 4, 8)
-   - Should connect seamlessly to corners
-
-3. **Handle multi-edge tiles** (indices 5, 7, 10, 11, 13, 14)
-   - Check that transitions flow naturally
-
-4. **Add the special tiles**
-   - Index 0: Island (fully surrounded by other terrain)
-   - Index 15: Solid center tile (fully surrounded by same terrain)
-
-5. **Create variations** (indices 16+)
-   - Only needed for center tiles (index 15)
-   - Add visual interest: grass patches, rocks, flowers, etc.
+1. **Create 16 mask tiles** (indices 0-15)
+   - White = base terrain visible
+   - Black = transition terrain visible
+2. **Keep masks crisp**
+   - With pixel art, sharp edges are acceptable
+3. **Re-use the same masks for every terrain**
+   - Only the solid variation rows are terrain-specific
 
 ### Tools for Creating Tilesets
 
