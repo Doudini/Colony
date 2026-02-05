@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://b16oqxjwwn8o"]
+[gd_scene load_steps=18 format=3 uid="uid://b16oqxjwwn8o"]
 
 [ext_resource type="Script" uid="uid://uyml78vfo4qg" path="res://scripts/planet_surface.gd" id="1"]
 [ext_resource type="Script" uid="uid://bg56vuqy6ihdv" path="res://scripts/isometric_camera.gd" id="2"]
@@ -12,6 +12,12 @@
 [ext_resource type="Script" uid="uid://c7uhttbrjwq57" path="res://scripts/upkeep_manager.gd" id="9"]
 [ext_resource type="Script" uid="uid://ckb50g4i3ardu" path="res://scripts/resource_tracker.gd" id="10"]
 [ext_resource type="Script" uid="uid://b74tov6tey0pm" path="res://scripts/building_control.gd" id="11"]
+[ext_resource type="Script" uid="uid://4cbukudxqbix" path="res://scripts/grid_overlay.gd" id="13_5i7v8"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_kj5d6"]
+atlas = ExtResource("4_kj5d6")
+region = Rect2(0, 0, 256, 256)
+filter_clip = true
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_horizon_color = Color(0.64625, 0.65575, 0.67075, 1)
@@ -35,7 +41,7 @@ script = ExtResource("2")
 
 [node name="TileGrid" type="Node3D" parent="."]
 script = ExtResource("3")
-terrain_atlas = ExtResource("4_kj5d6")
+terrain_atlas = SubResource("AtlasTexture_kj5d6")
 
 [node name="BuildingManager" type="Node3D" parent="."]
 script = ExtResource("4")
@@ -172,3 +178,8 @@ text = "Produces:
 layout_mode = 2
 text = "Upkeep:
 - Energy: 1/min"
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, 0, 30, 30)
+skeleton = NodePath("../IsometricCamera")
+script = ExtResource("13_5i7v8")

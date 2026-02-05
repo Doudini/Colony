@@ -911,95 +911,10 @@ func _grow_vein_cluster(start: Vector2i, target: int, allowed: Array, forbidden:
 	
 	return cluster
 
-# =========================
-# RENDERING
-# =========================
 
 # =========================
 # AUTOTILING FUNCTIONS
 # =========================
-
-#func _get_autotile_index(pos: Vector2i) -> int:
-	#"""
-	#Returns the marching squares tile index (0-15) based on neighbors.
-	#Checks 4 cardinal directions against the transition target.
-	#"""
-	#var tile_type = grid[pos.x][pos.y]["type"]
-#
-	## If this terrain doesn't transition, use solid tile (all neighbors match)
-	#if not tile_type in TERRAIN_TRANSITIONS:
-		## For water and other non-transitioning types, add variation
-		#if tile_type in ["shallow_water", "deep_water"]:
-			#return _get_water_variation(pos)
-		#return 15  # Solid tile
-#
-	#var transition_to = TERRAIN_TRANSITIONS[tile_type]
-	#var my_priority = TERRAIN_PRIORITY.get(tile_type, 0)
-#
-	## Check 4 cardinal neighbors (N, E, S, W) for marching squares
-	#var neighbors = [
-		#Vector2i(0, -1),  # North
-		#Vector2i(1, 0),   # East
-		#Vector2i(0, 1),   # South
-		#Vector2i(-1, 0)   # West
-	#]
-	## Check 4 cardinal edges, but consider diagonal corners for smoother marching squares.
-	#var edge_offsets = [
-		#[Vector2i(0, -1), Vector2i(-1, -1), Vector2i(1, -1)],  # North edge + corners
-		#[Vector2i(1, 0), Vector2i(1, -1), Vector2i(1, 1)],     # East edge + corners
-		#[Vector2i(0, 1), Vector2i(-1, 1), Vector2i(1, 1)],      # South edge + corners
-		#[Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(-1, 1)]    # West edge + corners
-	#]
-#
-	#var bitmask = 0
-	#for i in range(4):
-		##var has_transition_neighbor = false
-		##for offset in edge_offsets[i]:
-			##var check_pos = pos + offset
-			##if not is_valid_pos(check_pos):
-				##continue
-			##var neighbor_type = grid[check_pos.x][check_pos.y]["type"]
-			##var neighbor_priority = TERRAIN_PRIORITY.get(neighbor_type, 0)
-			##if neighbor_type == transition_to or neighbor_priority > my_priority:
-				##has_transition_neighbor = true
-				##break
-#
-		#var check_pos = pos + neighbors[i]
-##
-		## Edge of map counts as matching (prevents edge artifacts)
-		#if not is_valid_pos(check_pos):
-			#bitmask |= (1 << (3 - i))
-			#continue
-#
-		#var neighbor_type = grid[check_pos.x][check_pos.y]["type"]
-		#var neighbor_priority = TERRAIN_PRIORITY.get(neighbor_type, 0)
-#
-		## If neighbor is same type OR lower priority, we don't transition
-		## If neighbor is our transition target OR higher priority, we do transition
-		#if neighbor_type == tile_type or neighbor_priority < my_priority:
-#
-			#bitmask |= (1 << (3 - i))
-#
-			##bitmask |= (1 << (3 - i))
-#
-	## For fully surrounded tiles (all neighbors same), add variation
-	##if bitmask == 15:
-		##return _get_tile_variation(pos, tile_type)
-#
-	#return bitmask
-	
-#func _corner_filled(
-	#pos: Vector2i,
-	#base_type: String,
-	#base_priority: int
-#) -> bool:
-	#if not is_valid_pos(pos):
-		#return true  # treat outside as filled to avoid holes
-#
-	#var t = grid[pos.x][pos.y]["type"]
-	#var p = TERRAIN_PRIORITY.get(t, 0)
-#
-	#return t == base_type or p < base_priority
 func _corner_filled(
 	corner_pos: Vector2i,
 	base_type: String,
@@ -1085,7 +1000,7 @@ func _get_water_variation(pos: Vector2i) -> int:
 	"""
 	var seed_value = (pos.x * 73856093) ^ (pos.y * 19349663)
 	seed_value = abs(seed_value)
-	return seed_value % 4  # Water has 4 simple variations
+	return seed_value % 8  # Water has 4 simple variations
 
 func _get_tile_uv_coords(pos: Vector2i) -> Array:
 	"""
@@ -1126,13 +1041,11 @@ func _calculate_uv_for_tile(tile_index: int, atlas_row: int) -> Array:
 
 	# Return as [TL, TR, BR, BL]
 	return [
-		Vector2(u_left, v_bottom),    # Bottom-left
-		Vector2(u_right, v_bottom),  # Bottom-right
-		Vector2(u_right, v_top),     # Top-right
-		Vector2(u_left, v_top),      # Top-left
-		
-		
-		
+		Vector2(u_left+0.00095, v_bottom-0.00095),    # Bottom-left
+		Vector2(u_right-0.00095, v_bottom-0.00095),  # Bottom-right
+		Vector2(u_right-0.00095, v_top+0.00095),     # Top-right
+		Vector2(u_left+0.00095, v_top+0.00095),      # Top-left
+
 	]
 	#return [
 		#Vector2(u_right, v_bottom),  # Bottom-right
@@ -1192,6 +1105,7 @@ func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 		mat.albedo_texture = terrain_atlas
 		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST  # Pixel art style
 		mat.texture_repeat = false
+
 	else:
 		# Fallback to vertex colors
 		mat.vertex_color_use_as_albedo = true
@@ -1206,7 +1120,7 @@ func _add_quad_with_uv(st: SurfaceTool, pos: Vector3, uv_coords: Array):
 	Adds a quad with UV texture coordinates.
 	uv_coords should be [top_left, top_right, bottom_right, bottom_left].
 	"""
-	var h := TILE_SIZE * 0.475
+	var h := TILE_SIZE * 0.5 # 0.5 controls the spacing
 	var v0 := Vector3(pos.x - h, 0, pos.z - h)  # Top-left
 	var v1 := Vector3(pos.x + h, 0, pos.z - h)  # Top-right
 	var v2 := Vector3(pos.x + h, 0, pos.z + h)  # Bottom-right
@@ -1232,7 +1146,7 @@ func _add_quad_with_color(st: SurfaceTool, pos: Vector3, color: Color):
 	"""
 	Adds a quad with vertex color (fallback when no texture atlas is available).
 	"""
-	var h := TILE_SIZE * 0.475
+	var h := TILE_SIZE * 0.5 # controls spacing of cells
 	var v0 := Vector3(pos.x - h, 0, pos.z - h)
 	var v1 := Vector3(pos.x + h, 0, pos.z - h)
 	var v2 := Vector3(pos.x + h, 0, pos.z + h)
