@@ -288,6 +288,57 @@ No automated test suite. Manual testing:
 5. **50% demolish refund**: Get back half of building costs
 6. **Signal-based communication**: Loose coupling between systems
 
+## 3D Terrain Plan (tile_grid_var2.gd)
+
+### Overview
+`tile_grid_var2.gd` is an alternative terrain renderer that adds 3D heightmapped terrain with cliffs and elevation, inspired by SimCity 4 / Anno. It replaces flat Y=0 terrain with discrete height levels while keeping the same terrain generation, autotiling, and resource systems from `tile_grid.gd`.
+
+### Architecture
+- **Inherits from**: Standalone script (copy of tile_grid.gd with modified mesh generation)
+- **class_name**: `TileGridVar2` (can swap with `TileGrid` in scenes)
+- **Shader**: `terrain_blend_3d.gdshader` (extends terrain_blend with slope-based cliff texturing)
+
+### Height Level System
+Maps terrain types to discrete world-Y elevations:
+```
+deep_water    → Y = -3.0
+shallow_water → Y = -1.5
+beach         → Y =  0.0  (sea level)
+lowland/grass → Y =  1.5
+forest        → Y =  2.0
+ground        → Y =  3.0
+highland      → Y =  5.0
+mountain      → Y =  7.0
+```
+
+### Corner Height Interpolation
+Each tile has 4 corners. A corner's height = average of the up-to-4 tiles sharing that corner. This creates smooth slopes between elevation levels. Steep deltas produce natural cliff faces.
+
+### Tile Subdivision
+Each tile is subdivided into a 3x3 grid (18 triangles vs 2 in flat version). Sub-vertex heights are bilinearly interpolated from corner heights. Total geometry: ~1.2M triangles (65k tiles × 18 tri), chunked as before.
+
+### Cliff Texturing (terrain_blend_3d.gdshader)
+Extends the existing terrain_blend shader with slope detection:
+- `NORMAL.y > 0.7` → use terrain atlas texture (flat/gentle slope)
+- `NORMAL.y < 0.3` → use cliff rock texture (steep/vertical)
+- Between → smooth blend
+
+### Implementation Phases
+1. **Phase 1 (current)**: Heightmapped terrain mesh + cliff shader
+2. **Phase 2**: Water plane system with water shader (transparency, foam, waves)
+3. **Phase 3**: Integration fixes (camera height-awareness, building Y placement, hover detection)
+4. **Phase 4**: Visual polish (AO, shore detail, LOD)
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `scripts/tile_grid_var2.gd` | 3D terrain renderer (alternative to tile_grid.gd) |
+| `shaders/terrain_blend_3d.gdshader` | Slope-aware terrain + cliff shader |
+| `shaders/water.gdshader` | Water surface (Phase 2) |
+
+### Switching Between Variants
+In the scene editor, swap the TileGrid node's script between `tile_grid.gd` (flat) and `tile_grid_var2.gd` (3D). Both use the same grid data format, signals, and public API (`grid_to_world`, `world_to_grid`, `can_place_building`, etc).
+
 ## Documentation Files
 
 - `PROJECT_STATUS_SUMMARY.md`: Current implementation status
