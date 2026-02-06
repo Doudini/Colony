@@ -24,25 +24,25 @@ var ridge_noise: FastNoiseLite  # For mountain ridges
 
 const RESOURCE_CONFIGS := {
 	"minerals": {
-		"count": 50,
+		"count": 150,
 		"min_size": 3,
 		"max_size": 8,
-		"allowed_types": ["ground", "lowland", "mountain"],
+		"allowed_types": ["ground", "beach", "lowland", "highland", "mountain"],
 		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
 	},
 	"biomatter": {
-		"count": 50,
+		"count": 150,
 		"min_size": 3,
 		"max_size": 8,
-		"allowed_types": ["ground", "lowland", "highland"],
+		"allowed_types": ["shallow_water", "ground", "beach", "highland", "lowland", "mountain"],
 		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
 	},
 	"hydrogen": {
-		"count": 50,
+		"count": 100,
 		"min_size": 3,
 		"max_size": 8,
 		"allowed_types": ["ground", "highland", "mountain"],
@@ -51,7 +51,7 @@ const RESOURCE_CONFIGS := {
 		"min_distance_from_water": 2
 	},
 	"crystals": {
-		"count": 25,
+		"count": 30,
 		"min_size": 1,
 		"max_size": 4,
 		"allowed_types": ["ground", "highland", "mountain"],
@@ -70,7 +70,7 @@ const RESOURCE_CONFIGS := {
 		"prefer_near_rivers": true
 	},
 	"ore": {
-		"count": 40,
+		"count": 100,
 		"min_size": 4,
 		"max_size": 10,
 		"allowed_types": ["highland", "mountain"],
@@ -79,7 +79,7 @@ const RESOURCE_CONFIGS := {
 		"min_distance_from_water": 0
 	},
 	"rare_minerals": {
-		"count": 10,
+		"count": 20,
 		"min_size": 4,
 		"max_size": 10,
 		"allowed_types": ["highland", "mountain"],
@@ -1031,10 +1031,10 @@ func _calculate_uv_for_tile(tile_index: int, atlas_row: int) -> Array:
 
 	# Return as [TL, TR, BR, BL]
 	return [
-		Vector2(u_left+0.0001, v_bottom-0.0001),    # Bottom-left
-		Vector2(u_right-0.0001, v_bottom-0.0001),  # Bottom-right
-		Vector2(u_right-0.0001, v_top+0.0001),     # Top-right
-		Vector2(u_left+0.0001, v_top+0.0001),      # Top-left
+		Vector2(u_left+0.001, v_bottom-0.001),    # Bottom-left
+		Vector2(u_right-0.001, v_bottom-0.001),  # Bottom-right
+		Vector2(u_right-0.001, v_top+0.001),     # Top-right
+		Vector2(u_left+0.001, v_top+0.001),      # Top-left
 
 	]
 	#return [

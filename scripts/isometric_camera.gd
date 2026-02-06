@@ -2,13 +2,13 @@ extends Camera3D
 class_name IsometricCamera
 # Isometric camera controller for tile-based view
 
-@export var move_speed: float = 20.0
+@export var move_speed: float = 40.0
 @export var zoom_speed: float = 5.0
-@export var min_zoom: float = 10.0
-@export var max_zoom: float = 150.0
+@export var min_zoom: float = 30.0
+@export var max_zoom: float = 250.0
 @export var rotation_speed: float = 90.0  # Degrees per second
 
-var current_zoom: float = 30.0
+var current_zoom: float = 90.0
 var target_position: Vector3 = Vector3.ZERO
 var camera_rotation: float = 45.0  # Degrees around Y axis
 
