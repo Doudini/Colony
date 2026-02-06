@@ -5,17 +5,17 @@ const HEIGHT_LEVELS := {
 	"deep_water": -3.0,
 	"shallow_water": -1.5,
 	"beach": 0.0,
-	"marsh": 0.0,
-	"grassland": 1.5,
-	"lowland": 1.5,
-	"forest": 3.0,
-	"ground": 3.0,
-	"highland": 5.0,
-	"mountain": 7.0
+	"marsh": 0.5,
+	"grassland": 1.0,
+	"lowland": 1.0,
+	"forest": 1.5,
+	"ground": 1.0,
+	"highland": 2.0,
+	"mountain": 3.0
 }
 
 const TILE_SUBDIVISIONS := 3
-const WATER_LEVEL := -0.2
+const WATER_LEVEL := 0.25
 
 @export var water_texture: Texture2D
 const WATER_SHADER := preload("res://shaders/water.gdshader")
@@ -32,8 +32,6 @@ func _create_visual_grid():
 			chunk_meshes[coord] = mesh
 			add_child(mesh)
 
-	var water_mesh := _create_water_mesh()
-	add_child(water_mesh)
 
 func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 	var st := SurfaceTool.new()
@@ -80,44 +78,6 @@ func _create_chunk_mesh(chunk: Vector2i) -> MeshInstance3D:
 
 	return mi
 
-func _create_water_mesh() -> MeshInstance3D:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	var half_width = (grid_width * TILE_SIZE) * 0.5
-	var half_height = (grid_height * TILE_SIZE) * 0.5
-
-	var v0 := Vector3(-half_width, WATER_LEVEL, -half_height)
-	var v1 := Vector3(half_width, WATER_LEVEL, -half_height)
-	var v2 := Vector3(half_width, WATER_LEVEL, half_height)
-	var v3 := Vector3(-half_width, WATER_LEVEL, half_height)
-
-	st.set_uv(Vector2(0.0, 0.0))
-	st.add_vertex(v0)
-	st.set_uv(Vector2(1.0, 0.0))
-	st.add_vertex(v1)
-	st.set_uv(Vector2(1.0, 1.0))
-	st.add_vertex(v2)
-
-	st.set_uv(Vector2(0.0, 0.0))
-	st.add_vertex(v0)
-	st.set_uv(Vector2(1.0, 1.0))
-	st.add_vertex(v2)
-	st.set_uv(Vector2(0.0, 1.0))
-	st.add_vertex(v3)
-
-	st.generate_normals()
-
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-
-	var shader_mat := ShaderMaterial.new()
-	shader_mat.shader = WATER_SHADER
-	if water_texture:
-		shader_mat.set_shader_parameter("water_texture", water_texture)
-	mi.material_override = shader_mat
-
-	return mi
 
 func _add_subdivided_tile(
 	st: SurfaceTool,

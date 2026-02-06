@@ -27,7 +27,7 @@ const RESOURCE_CONFIGS := {
 		"count": 50,
 		"min_size": 3,
 		"max_size": 8,
-		"allowed_types": ["ground", "highland", "mountain"],
+		"allowed_types": ["ground", "lowland", "mountain"],
 		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
@@ -36,7 +36,7 @@ const RESOURCE_CONFIGS := {
 		"count": 50,
 		"min_size": 3,
 		"max_size": 8,
-		"allowed_types": ["ground", "highland", "mountain"],
+		"allowed_types": ["ground", "lowland", "highland"],
 		"forbidden_types": ["deep_water", "shallow_water", "beach", "marsh"],
 		"shape": "blob",
 		"min_distance_from_water": 2
@@ -151,7 +151,7 @@ const ATLAS_CONFIG := {
 	}
 }
 
-const MASK_ROW := 9
+const MASK_ROW := 10
 
 # Texture atlas settings
 const ATLAS_TILE_SIZE := 16  # Size of each tile in pixels
@@ -172,7 +172,7 @@ func _ready():
 	#_add_marshes()
 	_smooth_terrain()
 	
-	_place_major_rivers()  # New: Place long rivers first
+	#_place_major_rivers()  # New: Place long rivers first
 	_add_beaches()
 	_build_corner_grid()
 	_place_resource_deposits()
@@ -327,9 +327,9 @@ func _assign_terrain_types():
 				else:
 					grid[x][y]["type"] = "ground"
 			elif h < 0.75:
-				grid[x][y]["type"] = "highland"
+				grid[x][y]["type"] = "forest" # highland
 			else:
-				grid[x][y]["type"] = "mountain"
+				grid[x][y]["type"] = "ground" # mountain
 	
 	print("Height range: %.3f to %.3f" % [height_stats["min"], height_stats["max"]])
 
